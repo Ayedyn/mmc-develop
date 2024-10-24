@@ -29,7 +29,7 @@ BUILT      := built
 BINDIR     := $(BIN)
 OBJDIR 	   := $(BUILT)
 CCFLAGS    += -c -Wall -g -DMCX_EMBED_CL -fno-strict-aliasing -MMD -MP#-pedantic -std=c99 -mfpmath=sse -ffast-math -mtune=core2
-PTXFLAGS   += -O3 -Xptxas -allow-expensive-optimizations -ptx --expt-relaxed-constexpr -use_fast_math -MMD -MP
+PTXFLAGS   += -O3 -Xptxas -allow-expensive-optimizations -ptx --expt-relaxed-constexpr -use_fast_math -MMD -MP -g -lineinfo
 INCLUDEDIR := $(MMCDIR)/src -I$(MMCDIR)/src/zmat/easylzma -I$(MMCDIR)/src/ubj -I$(CUDAHOME)/include -I$(OPTIXHOME)/include -I$(OPTIXHOME)/SDK -I$(OPTIXHOME)/SDK/support
 AROUTPUT   += -o
 MAKE       ?= make

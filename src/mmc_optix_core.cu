@@ -45,16 +45,16 @@ __device__ __forceinline__ void launchPhoton(optixray& r, mcx::Random& rng) {
     r.weight = 1.0f;
     r.photontimer = 0.0f;
     r.mediumid = gcfg.mediumid0;
-    printf("\nfirst photon is being launched with gashandle0 = %llx", gcfg.gashandle0); 
     r.gashandle = gcfg.gashandle0;
 }
 
 /**
  * @brief Move a photon one step forward
  */
+// TODO: OptixVisibilityMask was 255 previously, figure out we need to change it to 1
 __device__ __forceinline__ void movePhoton(optixray& r, mcx::Random& rng) {
     optixTrace(r.gashandle, r.p0, r.dir, 0.0f, r.slen / gcfg.medium[r.mediumid].mus,
-               0.0f, OptixVisibilityMask(255), OptixRayFlags::OPTIX_RAY_FLAG_CULL_FRONT_FACING_TRIANGLES, 0, 1, 0,
+               0.0f, OptixVisibilityMask(1), OptixRayFlags::OPTIX_RAY_FLAG_CULL_FRONT_FACING_TRIANGLES, 0, 1, 0,
                *(uint32_t*) & (r.p0.x), *(uint32_t*) & (r.p0.y), *(uint32_t*) & (r.p0.z),
                *(uint32_t*) & (r.dir.x), *(uint32_t*) & (r.dir.y), *(uint32_t*) & (r.dir.z),
                *(uint32_t*) & (r.slen), *(uint32_t*) & (r.weight), *(uint32_t*) & (r.photontimer),
@@ -324,7 +324,6 @@ extern "C" __global__ void __raygen__rg() {
     launchPhoton(r, rng);
 
     int ndone = 0;  // number of simulated photons
-    printf("\n launchindex: %d", launchindex.x);
     while (ndone < (gcfg.threadphoton + (launchindex.x < gcfg.oddphoton))) {
         movePhoton(r, rng);
 
@@ -341,6 +340,7 @@ extern "C" __global__ void __raygen__rg() {
  */
 extern "C" __global__ void __closesthit__ch() {
     // get photon and ray information from payload
+    printf("\n closesthit triggered");
     optixray r = getRay();
 
     // get rng
@@ -394,11 +394,9 @@ extern "C" __global__ void __closesthit__ch() {
     const unsigned int hitkind = optixGetHitKind();
     const OptixPrimitiveType hit_type = optixGetPrimitiveType(hitkind);
 
+    // TODO: get rid of this debugging code
     if (hit_type == OptixPrimitiveType::OPTIX_PRIMITIVE_TYPE_CUSTOM) {
-        // TODO do something with the medium since it's a capsule
-        r.mediumid = 2.0;
-
-        printf("HIT\n");
+        printf("HIT AN IMPLICIT\n");
     }
 
     r.mediumid = __float_as_uint(fnorm.w);
