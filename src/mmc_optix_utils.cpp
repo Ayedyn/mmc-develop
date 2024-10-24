@@ -145,7 +145,8 @@ void optix_run_simulation(mcconfig* cfg, tetmesh* mesh, raytracer* tracer,
                     optixcfg.launchParamsBuffer.sizeInBytes,
                     &optixcfg.sbt,
                     /*! dimensions of the launch: */
-                    optixcfg.launchWidth, 1, 1));
+                   1,1,1)); 
+                   // TODO: uncomment this after debugging optixcfg.launchWidth, 1, 1));
     CUDA_ASSERT(cudaDeviceSynchronize());
     MMC_FPRINTF(cfg->flog,
                 "kernel complete:  \t%d ms\nretrieving flux ... \t",
@@ -370,6 +371,7 @@ void prepLaunchParams(mcconfig* cfg, tetmesh* mesh, GPUInfo* gpu,
            optixcfg->launchParams.mediumid0 = IMPLICIT_MATERIAL;   
            optixcfg->launchParams.gashandle0 = 
                optixcfg->inside_primitive_handles[optixcfg->launchParams.mediumid0];
+            printf("\nPhoton is starting inside implicit material, gashandle0 is %llx", optixcfg->launchParams.gashandle0); 
         }
         // initialize starting handle and medium if the ray is outside an implicit shape 
         else{
@@ -377,8 +379,11 @@ void prepLaunchParams(mcconfig* cfg, tetmesh* mesh, GPUInfo* gpu,
             optixcfg->launchParams.mediumid0 = mesh->type[cfg->e0 - 1];
 
             // init gashandle using initial medium ID
+            printf("\n outside primitive handles length: %d", optixcfg->outside_primitive_handles.size());
+            printf("\n outside primitive handles index is: %d", optixcfg->launchParams.mediumid0);
             optixcfg->launchParams.gashandle0 = 
             optixcfg->outside_primitive_handles[optixcfg->launchParams.mediumid0];
+            printf("\nPhoton is starting outside implicit material, gashandle0 is %llx", optixcfg->launchParams.gashandle0);
         }
     }
     else{
@@ -414,6 +419,8 @@ void prepLaunchParams(mcconfig* cfg, tetmesh* mesh, GPUInfo* gpu,
         cfg->nphoton / optixcfg->launchWidth;
     optixcfg->launchParams.oddphoton =
         cfg->nphoton - optixcfg->launchParams.threadphoton * totalthread;
+
+    printf("\nNPHOTON IS: %d", cfg->nphoton);
 
     // output buffer (single precision)
     optixcfg->outputBufferSize = (optixcfg->launchParams.crop0.w << 1);
@@ -541,10 +548,15 @@ void createModule(mcconfig* cfg, OptixParams* optixcfg, std::string ptxcode,
         optixcfg->pipelineCompileOptions.numPayloadValues = 18;
         optixcfg->pipelineCompileOptions.numAttributeValues = 4;
         optixcfg->pipelineCompileOptions.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_TRIANGLE | OPTIX_PRIMITIVE_TYPE_FLAGS_SPHERE | OPTIX_PRIMITIVE_TYPE_FLAGS_CUSTOM;
+        optixcfg->pipelineCompileOptions.traversableGraphFlags =
+           OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_ANY; 
+    
     } else {
         optixcfg->pipelineCompileOptions.numPayloadValues = 16;
         optixcfg->pipelineCompileOptions.numAttributeValues =
             2;  // for triangle
+        optixcfg->pipelineCompileOptions.traversableGraphFlags =
+            OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS;
     }
 
 #ifndef NDEBUG
@@ -719,8 +731,6 @@ static void buildImplicitASHierarchy(tetmesh* mesh, surfmesh* smesh,
     std::cout << "Building acceleration structures." << mesh->prop
               << std::endl;
 
-    unsigned int primitiveCount = 0;
-
     // two separate vectors of traversable handles are created, one for
     // outside primitives with one handle for each medium
     for (int i = 0; i <= mesh->prop; ++i) {
@@ -728,7 +738,7 @@ static void buildImplicitASHierarchy(tetmesh* mesh, surfmesh* smesh,
                                            mesh, smesh + i, optixcfg, primitiveoffset, 0.0, 0.0));
     }
 
-    printf("\nThe number of inside primitives is: %d", primitiveCount);
+    printf("\nThe number of inside primitives is: %d", primitiveoffset);
 
     // one for inside primitives with one handle for each medium
     for (int i = 0; i <= mesh->prop; ++i) {
@@ -845,6 +855,8 @@ static OptixTraversableHandle buildSurfacesWithPrimitives(
 
     printf("\n finished pushing back geometries from config");
 
+
+
     // create the acceleration structures for capsules
     if (capsuleWidths.size() > 0) {
         OptixTraversableHandle capsulesHandle =
@@ -876,6 +888,8 @@ static OptixTraversableHandle buildSurfacesWithPrimitives(
         handles_to_combine.push_back(spheresHandle);
     }
 
+    // TODO: HANDLE MUST BE THE SAME AS THE HANDLE PASSED TO INSTANCE ACCEL STRUCTURES
+    
     // build surface mesh acceleration structure for one particular surface
     OptixTraversableHandle surfaceHandle =
         buildSurfMeshAccel(mesh, smesh, optixcfg, primitiveoffset);
@@ -884,8 +898,9 @@ static OptixTraversableHandle buildSurfacesWithPrimitives(
 
     // Combine the handles into one instance acceleration structure and
     // return it
-    return createInstanceAccelerationStructure(optixcfg,
+    createInstanceAccelerationStructure(optixcfg, surfaceHandle,
             handles_to_combine);
+    return surfaceHandle;
 }
 
 // Builds a an acceleration structure of linear (cylindrical with spherical
@@ -991,10 +1006,8 @@ static OptixTraversableHandle createCapsuleAccelStructure(
     // ==================================================================
     uint64_t compactedSize;
     compactedSizeBuffer.download(&compactedSize, 1);
-    printf("\n reached this section test");
     osc::CUDABuffer compactedOutputBuffer;
     compactedOutputBuffer.alloc(compactedSize);
-    printf("\n reached after the alloc");
     OPTIX_CHECK(
         optixAccelCompact(optixcfg->optixContext, optixcfg->stream,
                           capsulesHandle, compactedOutputBuffer.d_pointer(),
@@ -1090,10 +1103,8 @@ static OptixTraversableHandle createSphereAccelStructure(
     // ==================================================================
     // perform compaction
     // ==================================================================
-    printf("b1");
     uint64_t compactedSize;
     compactedSizeBuffer.download(&compactedSize, 1);
-    printf("b2");
     osc::CUDABuffer compactedOutputBuffer;
     compactedOutputBuffer.alloc(compactedSize);
     OPTIX_CHECK(
@@ -1101,7 +1112,6 @@ static OptixTraversableHandle createSphereAccelStructure(
                           spheresHandle, compactedOutputBuffer.d_pointer(),
                           compactedOutputBuffer.sizeInBytes, &spheresHandle));
     CUDA_SYNC_CHECK();
-    printf("b3");
     // ==================================================================
     // clean up
     // ==================================================================
@@ -1300,15 +1310,14 @@ OptixTraversableHandle buildSurfMeshAccel(tetmesh* tmesh, surfmesh* smesh,
     return asHandle;
 }
 
-static OptixTraversableHandle createInstanceAccelerationStructure(
+static void createInstanceAccelerationStructure(
     OptixParams* optixcfg,
+    OptixTraversableHandle& handle,
     std::vector<OptixTraversableHandle> handles_to_combine) {
 
 #ifndef NDBUG
     printf("\nCreating instance acceleration structures");
 #endif
-
-    OptixTraversableHandle instanceHandle;
 
     std::vector<OptixInstance> instances = std::vector<OptixInstance>();
     int i = 0;
@@ -1326,7 +1335,6 @@ static OptixTraversableHandle createInstanceAccelerationStructure(
         i++;
     }
 
-    printf("\n before alloc and upload of instances");
     osc::CUDABuffer instanceBuffer;
     instanceBuffer.alloc_and_upload(instances);
 
@@ -1356,15 +1364,13 @@ static OptixTraversableHandle createInstanceAccelerationStructure(
 
     osc::CUDABuffer outputBuffer;
     outputBuffer.alloc(bufferSizes.outputSizeInBytes);
-    printf("\n before building instance accel structure");
     OPTIX_CHECK(
         optixAccelBuild(optixcfg->optixContext, optixcfg->stream,
                         &accelerationOptions, &buildInput,
                         1,  // num of build inputs
                         tempBuffer.d_pointer(), tempBuffer.sizeInBytes,
                         outputBuffer.d_pointer(), outputBuffer.sizeInBytes,
-                        &instanceHandle, &emitDesc, 1));
-    printf("\n after building instance accel structure");
+                        &handle, &emitDesc, 1));
     // ==================================================================
     // perform compaction
     // ==================================================================
@@ -1376,10 +1382,9 @@ static OptixTraversableHandle createInstanceAccelerationStructure(
     compactedOutputBuffer.alloc(compactedSize);
     OPTIX_CHECK(
         optixAccelCompact(optixcfg->optixContext, optixcfg->stream,
-                          instanceHandle, compactedOutputBuffer.d_pointer(),
-                          compactedOutputBuffer.sizeInBytes, &instanceHandle));
+                          handle, compactedOutputBuffer.d_pointer(),
+                          compactedOutputBuffer.sizeInBytes, &handle));
     CUDA_SYNC_CHECK();
-    printf("\nafter compacting instance accel structure");
     // ==================================================================
     // clean up
     // ==================================================================
@@ -1387,7 +1392,8 @@ static OptixTraversableHandle createInstanceAccelerationStructure(
     tempBuffer.free();
     compactedSizeBuffer.free();
     compactedOutputBuffer.free();
-    return instanceHandle;
+    printf("\nInstance Handle is: %llx", handle);
+    printf("\nInstanceHandle& is: %llx", &handle);
 }
 
 /**

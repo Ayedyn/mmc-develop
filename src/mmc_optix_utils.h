@@ -151,8 +151,9 @@ static OptixTraversableHandle createSphereAccelStructure(
     const unsigned int primitiveOffset
 );
 
-static OptixTraversableHandle createInstanceAccelerationStructure(
+static void createInstanceAccelerationStructure(
     OptixParams* optixcfg,
+    OptixTraversableHandle& handles,
     std::vector<OptixTraversableHandle> handles_to_combine);
 
 void createPipeline(OptixParams* optixcfg);

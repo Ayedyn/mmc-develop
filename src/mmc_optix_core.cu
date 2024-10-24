@@ -10,6 +10,7 @@
 #include <optix_types.h>
 #include <sutil/vec_math.h>
 
+#include "surface_boundary.h"
 #include "implicit_capsule.h"
 #include "mmc_optix_ray.h"
 #include "mmc_optix_launchparam.h"
@@ -44,6 +45,7 @@ __device__ __forceinline__ void launchPhoton(optixray& r, mcx::Random& rng) {
     r.weight = 1.0f;
     r.photontimer = 0.0f;
     r.mediumid = gcfg.mediumid0;
+    printf("\nfirst photon is being launched with gashandle0 = %llx", gcfg.gashandle0); 
     r.gashandle = gcfg.gashandle0;
 }
 
@@ -131,6 +133,14 @@ __device__ __forceinline__ uint getVoxelIdx(const float3& p) {
 __device__ __forceinline__ uint getTimeFrame(const float& tof) {
     return min(((int)((tof - gcfg.tstart) * gcfg.Rtstep)),
                gcfg.maxgate - 1) * gcfg.crop0.z;
+}
+
+// gets a reference to a surface boundary struct via a primitive id in launch
+// params, which is a devicebuffer
+__device__ __forceinline__ immc::SurfaceBoundary& getSurfaceBoundary(                                                                                                           
+    int primIdx) {
+    printf("\nreached boundary obtaining code");
+    return ((immc::SurfaceBoundary*)gcfg.surfaceData)[primIdx];
 }
 
 /**
@@ -314,7 +324,7 @@ extern "C" __global__ void __raygen__rg() {
     launchPhoton(r, rng);
 
     int ndone = 0;  // number of simulated photons
-
+    printf("\n launchindex: %d", launchindex.x);
     while (ndone < (gcfg.threadphoton + (launchindex.x < gcfg.oddphoton))) {
         movePhoton(r, rng);
 
@@ -361,9 +371,21 @@ extern "C" __global__ void __closesthit__ch() {
     const int primid = optixGetPrimitiveIndex();
 
     // get info of triangle, including face normal, neighbouring medium
+    //TODO: more systematically branch device code for implicit MMC vs Shijie's version
+    // currently manually commenting
+
+
+    // MMC VERSION:
+    /* 
     const TriangleMeshSBTData& sbtData =
         *(const TriangleMeshSBTData*)(optixGetSbtDataPointer());
     float4 fnorm = sbtData.fnorm[primid];
+    */
+  
+    // IMMC VERSION:
+    const immc::SurfaceBoundary& surfaceData =
+        getSurfaceBoundary(optixGetPrimitiveIndex());
+    float4 fnorm = surfaceData.norm_and_mediumID;
 
     // assume transmission
     uint origmed = r.mediumid;
@@ -380,7 +402,13 @@ extern "C" __global__ void __closesthit__ch() {
     }
 
     r.mediumid = __float_as_uint(fnorm.w);
-    r.gashandle = sbtData.nbgashandle[primid];
+   
+    // TODO: create different versions for this 
+    // MMC VERSION: 
+    //r.gashandle = sbtData.nbgashandle[primid];
+
+    // IMMC VERSION:
+    r.gashandle = surfaceData.manifold; 
 
     // update ray direction at mismatched boundary
     if (gcfg.isreflect && currprop.n != gcfg.medium[r.mediumid].n) {
