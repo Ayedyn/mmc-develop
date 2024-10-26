@@ -722,14 +722,6 @@ McxContext::McxContext() {
 	this->devicePipeline =
 	    ShaderPipeline(this->optixContext, ptx, set, TOTAL_PARAM_COUNT, 4);
 
-
-
-    /* SET UP THE SHADER BINDING TABLE */
-/* UNRAVEL THE BELOW ABSTRACTION
-	this->deviceSbt = ShaderBindingTable<void*, void*, void*>
-        (this->devicePipeline, nullptr, nullptr, {0, 0, 0});
-*/
-                                                                                        
         // raygen   
         SbtRecord<void*> rrec = SbtRecord<void*>(nullptr);
         OPTIX_CHECK(optixSbtRecordPackHeader(this->devicePipeline.raygenProgram(), &rrec));
@@ -743,8 +735,6 @@ McxContext::McxContext() {
         // hit programs
         std::vector<void*> h = {0,0,0};
         std::vector<SbtRecord<void*>> grecs;
-
-
         if (h.size() != this->devicePipeline.hitgroupPrograms().size()) {
             throw std::runtime_error("Hitgroup data count was not the same as pipeline hitgroup count");
         }
@@ -752,10 +742,13 @@ McxContext::McxContext() {
         for (int i = 0; i < h.size(); i++)
         {
             grecs.push_back(SbtRecord<void*>(h[i]));
-            OPTIX_CHECK(optixSbtRecordPackHeader(this->devicePipeline.hitgroupPrograms()[i], &grecs[i    ]));
+            OPTIX_CHECK(optixSbtRecordPackHeader(
+                        this->devicePipeline.hitgroupPrograms()[i],
+                        &grecs[i]));
         }
 
-        DeviceBuffer<SbtRecord<void*>> hitgroupRecords = DeviceBuffer<SbtRecord<void*>>(grecs.data(), grecs.size());
+        DeviceBuffer<SbtRecord<void*>> hitgroupRecords = 
+            DeviceBuffer<SbtRecord<void*>>(grecs.data(), grecs.size());
 
         OptixShaderBindingTable sbt = {};
 
@@ -774,10 +767,8 @@ McxContext::McxContext() {
 McxContext::McxContext(McxContext&& src) {
 	this->optixContext = src.optixContext;
 	this->devicePipeline = std::move(src.devicePipeline);
-	//this->deviceSbt = std::move(src.deviceSbt);
 	src.optixContext = OptixDeviceContext();
 	src.devicePipeline = ShaderPipeline();
-//	src.deviceSbt = ShaderBindingTable<void*, void*, void*>();
 }
 
 // this function is run by the main and performs the mmc-optix simulation given
@@ -856,12 +847,40 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 	printf("\n THE NUMBER OF INSIDE PRIMS BEFORE SENDING TO GPU: %d", num_inside_prims);
 	// prepare optix pipeline parameters
 	McxLaunchParams paras = McxLaunchParams(
-	    size, boundary.handle(), curves.handle(), outputBuffer.handle(),
-	    duration, timeSteps, pos, dir, media, startHandle,
-	    startMedium, num_inside_prims, WIDTH_ADJ, threadphoton, oddphoton);
 
-	DeviceBuffer<McxLaunchParams> paraBuffer =
-	    DeviceBuffer<McxLaunchParams>(paras);
+        // uint3 dimensions of simulation
+	    size, 
+        // CUdeviceptr for vector of surface boundaries
+        boundary.handle(), 
+        // CUdeviceptr for vector of capsules 
+        curves.handle(), 
+        // CUdeviceptr for flattened 4D output array
+        outputBuffer.handle(),
+        // float for duration in milliseconds 
+        duration, 
+        // int for number of time steps 
+        timeSteps,
+        // float3 for starting position of ray
+        pos, 
+        // float3 for vector of starting ray direction 
+        dir, 
+        // standard vector of Medium structs in order for simulation 
+        media, 
+        // starting OptixTraversableHandle 
+        startHandle,
+        // uint32_t index of the starting Medium
+	    startMedium, 
+        // unsigned int describing number of GAS primitives for out-in tracing 
+        num_inside_prims, 
+        // float for marginal difference in radii for out-in 
+        // vs in-out primitives 
+        WIDTH_ADJ,
+        // unsigned int for number of photons per thread
+        threadphoton, 
+        // unsigned int for remainder after dividing between threads 
+        oddphoton);
+
+	DeviceBuffer<McxLaunchParams> paraBuffer(paras);
 
 	std::cout << "Beginning simulation." << std::endl;
 	std::chrono::steady_clock::time_point begin =
