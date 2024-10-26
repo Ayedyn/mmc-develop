@@ -51,10 +51,10 @@ PTXSUFFIX=.ptx
 ZMATLIB:=libzmat.a
 
 ## Lines involving cuda and c++ files to compile
-## It seems that random.cu is not included though?
 CUDAFILES=mcx_core
-CXXFILES=mcx_optix_host mcx_context shader_pipeline util mcx_utils mcx_shapes mcx_tictoc mcx_bench mcx_mie\
-tetrahedral_mesh mcx_gpu cjson/cJSON ubj/ubjw
+CXXFILES=mcx_optix_host mcx_context shader_pipeline mcx_tictoc mcx_bench\
+tetrahedral_mesh
+## removed util and ubj/ubjw from cxxfiles
 
 CXXOBJS   := $(addsuffix $(OBJSUFFIX), $(CXXFILES))
 OBJS      := $(addsuffix $(PTXSUFFIX), $(CUDAFILES)) $(CXXOBJS)
