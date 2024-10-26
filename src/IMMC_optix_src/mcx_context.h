@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <optix.h>
 
-#include "medium.h"
+#include "mmc_optix_launchparam.h"
 #include "shader_pipeline.h"
 #include "shader_binding_table.h"
 #include "tetrahedral_mesh.h"

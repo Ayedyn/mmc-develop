@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include "medium.h"
+#include "mmc_optix_launchparam.h"
 #include "surface_boundary.h"
 
 #ifndef IMPLICIT_CURVE_H
@@ -77,7 +77,8 @@ struct McxLaunchParams {
 			this->medium[i] = media[i];
 		}
 		for (int i = media.size(); i < MAX_MEDIA; i++) {
-			this->medium[i] = Medium(0.0, 0.0, 1.0, 1.0);
+			Medium default_medium = {0.0, 0.0, 1.0, 1.0};
+            this->medium[i] = default_medium;
 		}
 		this->threadphoton = threadphoton;
 		this->oddphoton = oddphoton;

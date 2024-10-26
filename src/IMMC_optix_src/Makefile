@@ -50,9 +50,9 @@ PTXSUFFIX=.ptx
 
 ## Lines involving cuda and c++ files to compile
 CUDAFILES=mcx_core
-CXXFILES=mcx_optix_host mcx_context shader_pipeline mcx_tictoc mcx_bench\
+CXXFILES=mcx_optix_host mcx_context shader_pipeline\
 tetrahedral_mesh
-## removed util and ubj/ubjw from cxxfiles
+## removed util and ubj/ubjw from cxxfiles mcx_bench and mcx_tictoc
 
 CXXOBJS   := $(addsuffix $(OBJSUFFIX), $(CXXFILES))
 OBJS      := $(addsuffix $(PTXSUFFIX), $(CUDAFILES)) $(CXXOBJS)

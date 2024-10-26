@@ -15,7 +15,7 @@
 #endif
 
 #include "mcx_launch_params.h"
-#include "medium.h"
+#include "mmc_optix_launchparam.h"
 #include "voxel_photon.h"
 
 constexpr float C_MM_PER_US = 299792.458;
@@ -105,7 +105,7 @@ __device__ __forceinline__ mcx::SurfaceBoundary& getSurfaceBoundary(
 	return ((mcx::SurfaceBoundary*)launchParams.surfaceBoundaries)[primIdx];
 }
 
-__device__ __forceinline__ mcx::Medium& getMediumFromID(int id) {
+__device__ __forceinline__ Medium& getMediumFromID(int id) {
 	return launchParams.medium[id];
 }
 
@@ -125,22 +125,22 @@ __device__ __forceinline__ void saveToBuffer(const uint &eid, const float &w) {
   * @brief Accumulate output quantities to a 3D grid
   */
 __device__ __forceinline__ void accumulateOutput(const mcx::VoxelPhotonPayload &vp, 
-						 const mcx::Medium &medium,
+						 const Medium &medium,
      						 const float &lmove) {
      // divide path into segments of equal length
      int segcount = ((int)(lmove) + 1) << 1;
      float seglen = lmove / segcount;
-     float segdecay = expf(-medium.absorption * seglen);
+     float segdecay = expf(-medium.mua * seglen);
      // false is a placeholder for statement checking for energy deposition setting
      float segloss = (false) ? vp.energy * (1.0f - segdecay) :
-         (medium.absorption ? vp.energy * (1.0f - segdecay) / medium.absorption : 0.0f);
+         (medium.mua ? vp.energy * (1.0f - segdecay) / medium.mua : 0.0f);
  
      // deposit weight loss of each segment to the corresponding grid
      float3 step = seglen * vp.direction;
      // in this case we can assume that nmin is 0,0,0, so delete the term:
      // float3 segmid = vp.origin - gcfg.nmin + 0.5f * step; // segment midpoint
      float3 segmid = vp.origin + 0.5f * step; // segment midpoint
-     float currtof = vp.elapsedTime + seglen * C_US_PER_MM * medium.refractiveIndex; // current time of flight
+     float currtof = vp.elapsedTime + seglen * C_US_PER_MM * medium.n; // current time of flight
 
      // round segmid to get the corresponding voxel value
      float3 lastVoxel = floor(segmid);
@@ -155,7 +155,7 @@ __device__ __forceinline__ void accumulateOutput(const mcx::VoxelPhotonPayload &
          // update information for the curr segment
          segloss *= segdecay;
          segmid += step;
-         currtof += seglen * C_US_PER_MM * medium.refractiveIndex;
+         currtof += seglen * C_US_PER_MM * medium.n;
 	 float3 lastVoxel = floor(segmid);
 	 uint3 midpt_voxel = make_uint3(lastVoxel.x, lastVoxel.y, lastVoxel.z);
          unsigned int neweid = flattenArrayLocationUint4(make_uint4(midpt_voxel, getTimeFrame(currtof)));
@@ -254,7 +254,7 @@ __device__ __forceinline__ void stepPhoton(mcx::VoxelPhoton& vp) {
 	optixTrace(vp.manifold, vp.origin - ESCAPE_BIAS * vp.direction,
 		   vp.direction, 0.0,
 		   vp.scatteringLengthLeft *
-			   getMediumFromID(vp.currentMedium).inverseScattering +
+			   1/getMediumFromID(vp.currentMedium).mus +
 		       ESCAPE_BIAS,
 		   0.0f, OptixVisibilityMask(1),
 		   OptixRayFlags::OPTIX_RAY_FLAG_CULL_FRONT_FACING_TRIANGLES, 0,
@@ -440,11 +440,11 @@ extern "C" __global__ void __miss__ms() {
 	getPayload(pl);
 
 	// get medium properties
-	mcx::Medium& medium = getMediumFromID(pl.currentMedium);
+	Medium& medium = getMediumFromID(pl.currentMedium);
 
 	// equivalent to lmove
 	float distanceTraveled =
-	    pl.scatteringLengthLeft * medium.inverseScattering;
+	    pl.scatteringLengthLeft * 1/medium.mus;
 
 	// accumulate energy
 	accumulateOutput(pl, medium, distanceTraveled);
@@ -454,16 +454,16 @@ extern "C" __global__ void __miss__ms() {
 	
 	// update photon timer
 	pl.elapsedTime +=
-	    distanceTraveled * C_US_PER_MM * medium.refractiveIndex;
+	    distanceTraveled * C_US_PER_MM * medium.n;
 
 	// scattering event
 	pl.direction = selectScatteringDirection(pl.direction,
-						 medium.anisotropy, pl.random);
+						 medium.g, pl.random);
 	pl.scatteringLengthLeft =
 	    pl.random.exponential(1.0, std::numeric_limits<float>::epsilon());
 
 	// update photon weight
-	pl.energy *= expf(-medium.absorption * distanceTraveled);
+	pl.energy *= expf(-medium.mua * distanceTraveled);
 
 	setPayload(pl);
 }
@@ -472,10 +472,10 @@ extern "C" __global__ void __miss__ms() {
 extern "C" __global__ void __closesthit__ch() {
 	mcx::VoxelPhotonPayload pl;
 	getPayload(pl);
-	mcx::Medium& medium = getMediumFromID(pl.currentMedium);
+	Medium& medium = getMediumFromID(pl.currentMedium);
 
 	float tm = fmaxf(1.0 / 8192.0, optixGetRayTmax() - ESCAPE_BIAS);
-	float scatDist = tm * medium.scattering;
+	float scatDist = tm * medium.mus;
 	mcx::SurfaceBoundary& boundary =
 	    getSurfaceBoundary(optixGetPrimitiveIndex());
 
@@ -491,13 +491,13 @@ extern "C" __global__ void __closesthit__ch() {
 
 	pl.manifold = boundary.manifold;
 	pl.scatteringLengthLeft -= scatDist;
-	pl.elapsedTime += tm * C_US_PER_MM * medium.refractiveIndex;
-	// printf("The medium's absorption used was: %f\n", medium.absorption);
-	pl.energy *= expf(-medium.absorption * tm);
+	pl.elapsedTime += tm * C_US_PER_MM * medium.n;
+	// printf("The medium's absorption used was: %f\n", medium.mua);
+	pl.energy *= expf(-medium.mua * tm);
 
 	pl.currentMedium = boundary.medium;
 
-	mcx::Medium newmedium = getMediumFromID(pl.currentMedium);
+	Medium newmedium = getMediumFromID(pl.currentMedium);
 
 	setPayload(pl);
 }
