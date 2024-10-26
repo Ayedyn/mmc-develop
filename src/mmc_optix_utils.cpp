@@ -41,21 +41,25 @@ void optix_run_simulation(mcconfig* cfg, tetmesh* mesh, raytracer* tracer,
 
     // TODO: make this inputted by user
     if (usingImplicitPrimitives) {
-        immc::ImplicitCapsule test_capsule_1{make_float3(20.0, 20.0, 20.0), make_float3(50.0, 50.0, 20.0), 20.0}; //v1, v2, width
-        immc::ImplicitCapsule test_capsule_2{make_float3(0.0, 0.0, 0.0), make_float3(50.0, 0.0, 0.0), 1.0}; //v1, v2, width
-
+        immc::ImplicitCapsule test_capsule_1{make_float3(20.0, 20.0, 20.0),
+            make_float3(50.0, 50.0, 20.0), 1.0}; //v1, v2, width
         optixcfg.capsules.push_back(test_capsule_1);
-        optixcfg.capsules.push_back(test_capsule_2);
 
-        optixcfg.spheres.resize(1);
-        immc::ImplicitSphere test_sphere_1{make_float3(30, 30, 3), 1};
+        immc::ImplicitCapsule test_capsule_2{make_float3(0.0, 0.0, 0.0),
+            make_float3(50.0, 0.0, 0.0), 1.0}; //v1, v2, width
+//        optixcfg.capsules.push_back(test_capsule_2);
+
+        immc::ImplicitSphere test_sphere_1{make_float3(30, 30, 3), 3};
         optixcfg.spheres.push_back(test_sphere_1);
+
+        // TODO make sure that the stuff pushed back into the optixcfg are correct
     }
 
     // temp variable:
     float WIDTH_ADJ_TEMP = 1 / 1024.0;
 
     createContext(cfg, &optixcfg);
+
     MMC_FPRINTF(cfg->flog, "optix init complete:  \t%d ms\n",
                 GetTimeMillis() - tic0);
     fflush(cfg->flog);
@@ -69,6 +73,7 @@ void optix_run_simulation(mcconfig* cfg, tetmesh* mesh, raytracer* tracer,
     createRaygenPrograms(&optixcfg);
     createMissPrograms(&optixcfg);
     createHitgroupPrograms(&optixcfg);
+
     MMC_FPRINTF(cfg->flog, "optix device programs complete:  \t%d ms\n",
                 GetTimeMillis() - tic0);
     fflush(cfg->flog);
@@ -87,6 +92,10 @@ void optix_run_simulation(mcconfig* cfg, tetmesh* mesh, raytracer* tracer,
         // Need to populate gas handles
         buildImplicitASHierarchy(mesh, smesh_lowlevel_array, &optixcfg,
                                  primitiveoffset, WIDTH_ADJ_TEMP);
+        // 
+
+
+
         buildSurfaceData(mesh, smesh_lowlevel_array, &optixcfg);
     }
 
@@ -126,7 +135,7 @@ void optix_run_simulation(mcconfig* cfg, tetmesh* mesh, raytracer* tracer,
     // ==================================================================
     prepLaunchParams(cfg, mesh, gpu, &optixcfg);
     CUDA_ASSERT(cudaDeviceSynchronize());
-    MMC_FPRINTF(cfg->flog, "optix launch parameters complete:  \t%d ms\n",
+    MMC_FPRINTF(cfg->flog, "\noptix launch parameters complete:  \t%d ms\n",
                 GetTimeMillis() - tic0);
     fflush(cfg->flog);
 
@@ -137,8 +146,10 @@ void optix_run_simulation(mcconfig* cfg, tetmesh* mesh, raytracer* tracer,
                 "lauching OptiX for time window [%.1fns %.1fns] ...\n",
                 cfg->tstart * 1e9, cfg->tend * 1e9);
     fflush(cfg->flog);
+
     OPTIX_CHECK(optixLaunch(/*! pipeline we're launching launch: */
-                    optixcfg.pipeline, optixcfg.stream,
+                    optixcfg.pipeline, 
+                    optixcfg.stream,
                     /*! parameters and SBT */
                     optixcfg.launchParamsBuffer.d_pointer(),
                     optixcfg.launchParamsBuffer.sizeInBytes,
@@ -369,6 +380,7 @@ void prepLaunchParams(mcconfig* cfg, tetmesh* mesh, GPUInfo* gpu,
            optixcfg->launchParams.mediumid0 = IMPLICIT_MATERIAL;   
            optixcfg->launchParams.gashandle0 = 
                optixcfg->inside_primitive_handles[optixcfg->launchParams.mediumid0];
+            printf("\n ray is starting in implicit structure");
         }
         // initialize starting handle and medium if the ray is outside an implicit shape 
         else{
@@ -378,6 +390,7 @@ void prepLaunchParams(mcconfig* cfg, tetmesh* mesh, GPUInfo* gpu,
             // init gashandle using initial medium ID
             optixcfg->launchParams.gashandle0 = 
             optixcfg->outside_primitive_handles[optixcfg->launchParams.mediumid0];
+            printf("\n ray is starting outside of implicit structure"); 
         }
     }
     else{
@@ -684,6 +697,10 @@ void createHitgroupPrograms(OptixParams* optixcfg) {
                                             &logsize,
                                             optixcfg->hitgroupPGs.data()));
 
+        if (logsize) {
+            std::cout << log << std::endl;
+        }
+
         return;
     }
 
@@ -715,6 +732,7 @@ static void buildImplicitASHierarchy(tetmesh* mesh, surfmesh* smesh,
                                      OptixParams* optixcfg,
                                      unsigned int& primitiveoffset,
                                      const float WIDTH_ADJ) {
+
     std::vector<OptixTraversableHandle> outside_prim_handles;
     std::vector<OptixTraversableHandle> inside_prim_handles;
 
@@ -739,6 +757,7 @@ static void buildImplicitASHierarchy(tetmesh* mesh, surfmesh* smesh,
 
     optixcfg->inside_primitive_handles = inside_prim_handles;
     optixcfg->outside_primitive_handles = outside_prim_handles;
+
 }
 
 // vector to look up a given material id, surface normal, and handle for
@@ -751,9 +770,11 @@ static void buildSurfaceData(tetmesh* mesh, surfmesh* smesh, OptixParams* optixc
     for (int i = 0; i <= mesh->prop; ++i) {
         // add handles and material ID for capsules superimposed on a surface mesh
         for (const immc::ImplicitCapsule& capsule : optixcfg->capsules) {
-            immc::SurfaceBoundary c_data{make_float4(0, 0, 0, static_cast<float>(IMPLICIT_MATERIAL)), 
+            immc::SurfaceBoundary c_data{make_float4(0, 0, 0, 
+                    static_cast<float>(IMPLICIT_MATERIAL)), 
                 optixcfg->inside_primitive_handles[i]};
-            optixcfg->surfaceData.push_back(c_data);
+                optixcfg->surfaceData.push_back(c_data);
+                //TODO: add curveData here
         }
 
         printf("\n number of inside-capsules sent to device: %d", optixcfg->capsules.size());
@@ -772,12 +793,18 @@ static void buildSurfaceData(tetmesh* mesh, surfmesh* smesh, OptixParams* optixc
 
         // add handles and material ID for triangles composing the surface mesh
         for (int j = 0; j < smesh[i].norm.size(); ++j) {
+            if (smesh[i].nbtype[j]>0) { 
             immc::SurfaceBoundary t_data{make_float4(
                                                 smesh[i].norm[j].x, smesh[i].norm[j].y,
                                                 smesh[i].norm[j].z, 
-                                                static_cast<float>(smesh[i].nbtype[j])),
-                                                optixcfg->outside_primitive_handles[i]};
-            optixcfg->surfaceData.push_back(t_data);
+                                                static_cast<float>(smesh[i].nbtype[j-1])),
+                                                optixcfg->outside_primitive_handles[i-1]};
+             optixcfg->surfaceData.push_back(t_data); 
+            } else {
+                immc::SurfaceBoundary t_data{make_float4(0,0,0,0),
+                (OptixTraversableHandle) nullptr};
+                optixcfg->surfaceData.push_back(t_data);
+            }
         }
         printf("\n number of inside-triangles sent to device: %d", smesh[i].norm.size());
     }
@@ -810,12 +837,16 @@ static void buildSurfaceData(tetmesh* mesh, surfmesh* smesh, OptixParams* optixc
         // add handles and material ID for triangles composing the surface mesh
         // TODO: figure out why this conditional is here:
         for (int j = 0; j < smesh[i].norm.size(); ++j) {
+            if (smesh[i].nbtype[j]>0) {
             immc::SurfaceBoundary t_data{make_float4(
                                         smesh[i].norm[j].x, smesh[i].norm[j].y,
                                         smesh[i].norm[j].z, 
                                         static_cast<float>(IMPLICIT_MATERIAL)),
-                                            optixcfg->outside_primitive_handles[i]};
+                                            optixcfg->outside_primitive_handles[i-1]};
             optixcfg->surfaceData.push_back(t_data);
+            } else {
+                
+            }
         }
         printf("\n number of outside-triangles sent to device: %d", smesh[i].norm.size());
  
@@ -831,6 +862,7 @@ static OptixTraversableHandle buildSurfacesWithPrimitives(
     tetmesh* mesh, surfmesh* smesh, OptixParams* optixcfg,
     unsigned int& primitiveoffset, const float capsuleWidthAdjustment,
     const float sphereRadiusAdjustment) {
+
     // vector contains all handles to make an instance acceleration
     // structure (IAS)
     std::vector<OptixTraversableHandle> handles_to_combine;
