@@ -14,10 +14,10 @@
 #include <cstring>
 #include "incbin.h"
 #include "mcx_launch_params.h"
-#include "shader_binding_table.h"
 #include "shader_pipeline.h"
 #include "tetrahedral_mesh.h"
 #include "util.h"
+#include "device_buffer.h"
 
 // this includes lots of optix features
 #ifndef NDEBUG
@@ -680,7 +680,10 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 
 // constructor
 McxContext::McxContext() {
-	CUDA_CHECK(cudaFree(nullptr));
+
+    // ensure any previous device resources are freed
+
+    CUDA_CHECK(cudaFree(nullptr));
 
 	OPTIX_CHECK(optixInit());
 
@@ -719,18 +722,62 @@ McxContext::McxContext() {
 	this->devicePipeline =
 	    ShaderPipeline(this->optixContext, ptx, set, TOTAL_PARAM_COUNT, 4);
 
-	this->deviceSbt = ShaderBindingTable<void*, void*, void*>(
-	    this->devicePipeline, nullptr, nullptr, {0, 0, 0});
+
+
+    /* SET UP THE SHADER BINDING TABLE */
+/* UNRAVEL THE BELOW ABSTRACTION
+	this->deviceSbt = ShaderBindingTable<void*, void*, void*>
+        (this->devicePipeline, nullptr, nullptr, {0, 0, 0});
+*/
+                                                                                        
+        // raygen   
+        SbtRecord<void*> rrec = SbtRecord<void*>(nullptr);
+        OPTIX_CHECK(optixSbtRecordPackHeader(this->devicePipeline.raygenProgram(), &rrec));
+        DeviceBuffer <SbtRecord<void*>> raygenRecord = rrec;
+        
+        // miss
+        SbtRecord<void*> mrec = SbtRecord<void*>(nullptr);
+        OPTIX_CHECK(optixSbtRecordPackHeader(this->devicePipeline.missProgram(), &mrec));
+        DeviceBuffer <SbtRecord<void*>> missRecord = mrec;
+
+        // hit programs
+        std::vector<void*> h = {0,0,0};
+        std::vector<SbtRecord<void*>> grecs;
+
+
+        if (h.size() != this->devicePipeline.hitgroupPrograms().size()) {
+            throw std::runtime_error("Hitgroup data count was not the same as pipeline hitgroup count");
+        }
+
+        for (int i = 0; i < h.size(); i++)
+        {
+            grecs.push_back(SbtRecord<void*>(h[i]));
+            OPTIX_CHECK(optixSbtRecordPackHeader(this->devicePipeline.hitgroupPrograms()[i], &grecs[i    ]));
+        }
+
+        DeviceBuffer<SbtRecord<void*>> hitgroupRecords = DeviceBuffer<SbtRecord<void*>>(grecs.data(), grecs.size());
+
+        OptixShaderBindingTable sbt = {};
+
+        sbt.raygenRecord = raygenRecord.handle();
+        sbt.missRecordBase = missRecord.handle();
+        sbt.missRecordStrideInBytes = sizeof(mrec);
+        sbt.missRecordCount = 1;
+        sbt.hitgroupRecordBase = hitgroupRecords.handle();
+        sbt.hitgroupRecordStrideInBytes = sizeof(SbtRecord<void*>);
+        sbt.hitgroupRecordCount = grecs.size();
+
+        this->SBT = sbt;
 }
 
 // move constructor
 McxContext::McxContext(McxContext&& src) {
 	this->optixContext = src.optixContext;
 	this->devicePipeline = std::move(src.devicePipeline);
-	this->deviceSbt = std::move(src.deviceSbt);
+	//this->deviceSbt = std::move(src.deviceSbt);
 	src.optixContext = OptixDeviceContext();
 	src.devicePipeline = ShaderPipeline();
-	src.deviceSbt = ShaderBindingTable<void*, void*, void*>();
+//	src.deviceSbt = ShaderBindingTable<void*, void*, void*>();
 }
 
 // this function is run by the main and performs the mmc-optix simulation given
@@ -828,7 +875,7 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 	// photoncount.
 	OPTIX_CHECK(optixLaunch(this->devicePipeline.handle(), nullptr, \
 			paraBuffer.handle(),
-				sizeof(paras), &this->deviceSbt.table(), launchWidth,
+				sizeof(paras), &this->SBT, launchWidth,
 				1, 1));
 
 	outputBuffer.read(od);
@@ -881,7 +928,7 @@ void McxContext::messageHandler(uint32_t level, const char* tag,
 }
 
 McxContext::~McxContext() {
-	this->deviceSbt = ShaderBindingTable<void*, void*, void*>();
+	//this->deviceSbt = ShaderBindingTable<void*, void*, void*>();
 	this->devicePipeline = ShaderPipeline();
 	optixDeviceContextDestroy(this->optixContext);
 	cudaDeviceSynchronize();

@@ -5,7 +5,6 @@
 
 #include "mmc_optix_launchparam.h"
 #include "shader_pipeline.h"
-#include "shader_binding_table.h"
 #include "tetrahedral_mesh.h"
 
 namespace mcx {
@@ -14,7 +13,8 @@ namespace mcx {
 		
 		OptixDeviceContext optixContext;
 		ShaderPipeline devicePipeline;
-		ShaderBindingTable<void*,void*,void*> deviceSbt;
+		//ShaderBindingTable<void*,void*,void*> deviceSbt;
+        OptixShaderBindingTable SBT;
 
 		McxContext(const McxContext&) = default;
 		McxContext& operator= (const McxContext&) = default;
@@ -22,6 +22,17 @@ namespace mcx {
 		void onMessageReceived(uint32_t level, const char* tag, const char* message);
 
 		static void messageHandler(uint32_t level, const char* tag, const char* message, void* data);
+
+        template<typename T>
+        struct SbtRecord
+        {
+            __align__(OPTIX_SBT_RECORD_ALIGNMENT)
+            char header[OPTIX_SBT_RECORD_HEADER_SIZE];
+            T data;
+
+            SbtRecord(T t);
+        };
+
 
 	public:
 		McxContext();
@@ -31,4 +42,13 @@ namespace mcx {
 
 		~McxContext();
 	};
+
+    // sets up an SbtRecord
+    template<typename T>
+    McxContext::SbtRecord<T>::SbtRecord(T t) {
+        this->data = t;
+    }
+
+
+
 }

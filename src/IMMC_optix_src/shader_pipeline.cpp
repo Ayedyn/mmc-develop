@@ -4,7 +4,6 @@
 #include <optix_stubs.h>
 // added this
 #include <optix_types.h>
-
 #include "util.h"
 
 namespace mcx {
