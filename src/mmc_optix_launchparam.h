@@ -3,6 +3,8 @@
 
 #define MAX_PROP_OPTIX 4000              /*maximum property number*/
 
+#include "cuda_runtime.h"
+
 /**
  * @brief struct for medium optical properties
  */
