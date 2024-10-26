@@ -33,7 +33,6 @@ CUCCOPT=-g -lineinfo -cubin -O3 -Xptxas -O3 -Xptxas -allow-expensive-optimizatio
 ## --use-local-env
 
 ## Something for linking matlab libraries?
-USERLINKOPT?=$(ZMATLIB) -lz
 MKDIR=mkdir
 
 ## linking cuda ray tracing libraries
@@ -48,7 +47,6 @@ AR=g++
 
 OBJSUFFIX=.o
 PTXSUFFIX=.ptx
-ZMATLIB:=libzmat.a
 
 ## Lines involving cuda and c++ files to compile
 CUDAFILES=mcx_core
@@ -83,8 +81,6 @@ ifeq ($(findstring CYGWIN,$(PLATFORM)), CYGWIN)
   CUCCOPT+=-Xcompiler "$(OMP) /W0"
   CUDA_STATIC=--cudart static -Xcompiler $(OMP) -Xcompiler /MT
   CPPOPT+=-Xcompiler $(OMP)
-  ZMATLIB    :=zmat/zmatlib.obj zmat/lz4/lz4.obj zmat/lz4/lz4hc.obj zmat/easylzma/*.obj zmat/easylzma/pavlov/*.obj
-  USERLINKOPT:=$(ZMATLIB) -lzlib
 else ifeq ($(findstring Darwin,$(PLATFORM)), Darwin)
   CUDA_STATIC=--cudart static
   CPPOPT+=$(OMP)
@@ -113,7 +109,6 @@ all: cudasdk $(OUTPUT_DIR)/$(BINARY)
 %$(OBJSUFFIX): %.cpp
 	$(CXX) $(INCLUDEDIRS) $(CPPOPT) -c -o $@  $<
 
-$(OUTPUT_DIR)/$(BINARY): makedirs $(ZMATLIB)
 $(OUTPUT_DIR)/$(BINARY): $(OBJS)
 	$(AR) $(CXXOBJS) $(OUTPUTFLAG) $(OUTPUT_DIR)/$(BINARY) $(LINKOPT) $(USERLINKOPT)
 
@@ -123,9 +118,6 @@ $(OUTPUT_DIR)/$(BINARY): $(OBJS)
 mcx_bench$(OBJSUFFIX): mcx_bench.c
 	$(CC) $(INCLUDEDIRS) -c -o mcx_bench$(OBJSUFFIX)  $<
 
-$(ZMATLIB):
-	-$(MAKE) -C zmat lib AR=ar CPPOPT="$(DLLFLAG) -O3" USERLINKOPT=
-
 cudasdk:
 	@if [ -z `which ${CUDACC}` ]; then \
 	   echo "Please first install CUDA SDK and add the path to nvcc to your PATH environment variable."; exit 1;\
@@ -133,7 +125,6 @@ cudasdk:
 makedirs:
 	@if test ! -d $(OUTPUT_DIR); then $(MKDIR) $(OUTPUT_DIR); fi
 clean:
-	-$(MAKE) -C zmat clean
 	-rm -f $(OBJS) $(CXXOBJS) $(OUTPUT_DIR)/$(BINARY)$(EXESUFFIX)
 
 # derived the astyle settings from https://github.com/nlohmann/json
