@@ -1,6 +1,8 @@
 #ifndef _MMC_OPTIX_LAUNCHPARAM_H
 #define _MMC_OPTIX_LAUNCHPARAM_H
 
+#include <vector_types.h>
+
 #define MAX_PROP_OPTIX 4000              /*maximum property number*/
 
 /**
