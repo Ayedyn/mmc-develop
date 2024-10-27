@@ -1,6 +1,8 @@
 #ifndef _MMC_OPTIX_LAUNCHPARAM_H
 #define _MMC_OPTIX_LAUNCHPARAM_H
 
+#include <vector_types.h>
+
 #define MAX_PROP_OPTIX 4000              /*maximum property number*/
 
 /**
@@ -24,8 +26,8 @@ typedef struct __attribute__((aligned(16))) MMC_Parameter {
 
     float3 srcpos;
     float3 srcdir;
-    float3 nmin;
-    float3 nmax;
+    float3 nmin; // minimum corner coordinates of dual grid
+    float3 nmax; // maximum corner coordinates of dual grid
     uint4 crop0;
     float dstep;
     float tstart, tend;
@@ -40,11 +42,24 @@ typedef struct __attribute__((aligned(16))) MMC_Parameter {
     int oddphoton;
 
     Medium medium[MAX_PROP_OPTIX];
+
+    // Fields for IMMC optix (Consoliate in the future):
+    uint3 dataSize;
+    CUdeviceptr surfaceBoundaries; // device pointer to a vector of surface boundaries 
+    // for IMMC primitives 
+    CUdeviceptr curveData; // device pointer to a vector of curve geometry
+    float duration;
+    int timeSteps;
+    unsigned int num_inside_prims;
+    float WIDTH_ADJ;
+
 } MMCParam;
 
 struct __attribute__((aligned(16))) TriangleMeshSBTData {
     float4 *fnorm; /**< x,y,z: face normal; w: neighboring medium type */
     OptixTraversableHandle *nbgashandle;
 };
+
+using PrimitiveSurfaceData = TriangleMeshSBTData;
 
 #endif
