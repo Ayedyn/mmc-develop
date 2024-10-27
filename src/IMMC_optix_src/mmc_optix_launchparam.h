@@ -52,6 +52,7 @@ typedef struct __attribute__((aligned(16))) MMC_Parameter {
     int timeSteps;
     unsigned int num_inside_prims;
     float WIDTH_ADJ;
+    // Fields for IMMC optix ^^^^^^^^^^^^^^^^^^^^^^    
 
 } MMCParam;
 
@@ -60,6 +61,7 @@ struct __attribute__((aligned(16))) TriangleMeshSBTData {
     OptixTraversableHandle *nbgashandle;
 };
 
+// Alias for IMMC usage with triangles, capsules, and spheres:
 using PrimitiveSurfaceData = TriangleMeshSBTData;
 
 #endif

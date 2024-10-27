@@ -102,6 +102,7 @@ endif
 
 
 all: cudasdk $(OUTPUT_DIR)/$(BINARY)
+	@echo "======================Build completed successfully======================="
 
 %$(PTXSUFFIX): %.cu
 	$(CUDACC) -c $(CUCCOPT) $(INCLUDEDIRS) -o $@  $<

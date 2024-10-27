@@ -13,11 +13,12 @@
 #include <algorithm>
 #include <cstring>
 #include "incbin.h"
-#include "mcx_launch_params.h"
 #include "shader_pipeline.h"
 #include "tetrahedral_mesh.h"
 #include "util.h"
 #include "device_buffer.h"
+#include "surface_boundary.h"
+
 
 // this includes lots of optix features
 #ifndef NDEBUG
@@ -846,41 +847,43 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 
 	printf("\n THE NUMBER OF INSIDE PRIMS BEFORE SENDING TO GPU: %d", num_inside_prims);
 	// prepare optix pipeline parameters
-	McxLaunchParams paras = McxLaunchParams(
-
+	MMCParam paras;
         // uint3 dimensions of simulation
-	    size, 
+	    paras.dataSize = size; 
         // CUdeviceptr for vector of surface boundaries
-        boundary.handle(), 
+        paras.surfaceBoundaries = boundary.handle(); 
         // CUdeviceptr for vector of capsules 
-        curves.handle(), 
+        paras.curveData = curves.handle(); 
         // CUdeviceptr for flattened 4D output array
-        outputBuffer.handle(),
+        paras.outputbuffer = outputBuffer.handle();
         // float for duration in milliseconds 
-        duration, 
+        paras.duration = duration; 
         // int for number of time steps 
-        timeSteps,
+        paras.timeSteps = timeSteps;
         // float3 for starting position of ray
-        pos, 
+        paras.srcpos = pos; 
         // float3 for vector of starting ray direction 
-        dir, 
-        // standard vector of Medium structs in order for simulation 
-        media, 
+        paras.srcdir = dir; 
+        // copy from vector into C style array
+        // of Medium structs in order for simulation
+        for (size_t i = 0; i < media.size(); ++i) {
+             paras.medium[i] = media[i]; // Copy each element
+        } 
         // starting OptixTraversableHandle 
-        startHandle,
+        paras.gashandle0 = startHandle;
         // uint32_t index of the starting Medium
-	    startMedium, 
+	    paras.mediumid0 = startMedium; 
         // unsigned int describing number of GAS primitives for out-in tracing 
-        num_inside_prims, 
+        paras.num_inside_prims = num_inside_prims;
         // float for marginal difference in radii for out-in 
         // vs in-out primitives 
-        WIDTH_ADJ,
+        paras.WIDTH_ADJ = WIDTH_ADJ;
         // unsigned int for number of photons per thread
-        threadphoton, 
+        paras.threadphoton = threadphoton; 
         // unsigned int for remainder after dividing between threads 
-        oddphoton);
+        paras.oddphoton = oddphoton;
 
-	DeviceBuffer<McxLaunchParams> paraBuffer(paras);
+	DeviceBuffer<MMCParam> paraBuffer(paras);
 
 	std::cout << "Beginning simulation." << std::endl;
 	std::chrono::steady_clock::time_point begin =

@@ -13,7 +13,6 @@ namespace mcx {
 		
 		OptixDeviceContext optixContext;
 		ShaderPipeline devicePipeline;
-		//ShaderBindingTable<void*,void*,void*> deviceSbt;
         OptixShaderBindingTable SBT;
 
 		McxContext(const McxContext&) = default;

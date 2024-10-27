@@ -14,16 +14,17 @@
 #include "intellisense_cuda_intrinsics.h"
 #endif
 
-#include "mcx_launch_params.h"
 #include "mmc_optix_launchparam.h"
 #include "voxel_photon.h"
+#include "surface_boundary.h"
+#include "implicit_curve.h"
 
 constexpr float C_MM_PER_US = 299792.458;
 constexpr float C_US_PER_MM = 1.0 / C_MM_PER_US;
 constexpr float ESCAPE_BIAS = 1.0 / 2048.0;
 
 extern "C" {
-__constant__ mcx::McxLaunchParams launchParams;
+__constant__ MMCParam launchParams;
 }
 
 __device__ __forceinline__ float3 mix(float3 a, float3 b, int3 select) {
@@ -92,8 +93,8 @@ __device__ __forceinline__ size_t flattenArrayLocationUint4(uint4 loc) {
 // get the index for the current time frame into the time array
 __device__ __forceinline__ unsigned int getTimeFrame(const float &tof) {
 	unsigned int t =
-	    min((int)floorf(fminf(tof, launchParams.simulationDuration) *
-			    launchParams.inverseTimeStep),
+	    min((int)floorf(fminf(tof, launchParams.duration) *
+			    (float)launchParams.timeSteps/launchParams.duration),
 		launchParams.timeSteps - 1);
 	return t;
 }
@@ -118,7 +119,7 @@ __device__ __forceinline__ mcx::ImplicitCurve& getCurveFromID(int id) {
 __device__ __forceinline__ void saveToBuffer(const uint &eid, const float &w) {
     // to minimize numerical error, use the same trick as MCX
     // becomes much slower when using atomicAdd(*double, double)
-    float accum = atomicAdd(&((float*)launchParams.outputBuffer)[eid], w);
+    float accum = atomicAdd(&((float*)launchParams.outputbuffer)[eid], w);
 }
 
   /**
@@ -179,24 +180,24 @@ __device__ __forceinline__ void accumulateOutput(const mcx::VoxelPhotonPayload &
 __device__ __forceinline__ size_t accumulateEnergy(uint3 loc, float energy,
 						   float time) {
 	unsigned int t =
-	    min((int)floorf(fminf(time, launchParams.simulationDuration) *
-			    launchParams.inverseTimeStep),
+	    min((int)floorf(fminf(time, launchParams.duration) *
+			    (float)launchParams.timeSteps/launchParams.duration),
 		launchParams.timeSteps - 1);
 	atomicAdd(
 	    &((float*)launchParams
-		  .outputBuffer)[flattenArrayLocationUint4(make_uint4(loc, t))],
+		  .outputbuffer)[flattenArrayLocationUint4(make_uint4(loc, t))],
 	    energy);
 }
 
 __device__ __forceinline__ size_t accumulateEnergyDeposition(uint3 loc, float energy, float time, float medium_mua) {
 	unsigned int t =
-	    min((int)floorf(fminf(time, launchParams.simulationDuration) *
-			    launchParams.inverseTimeStep),
+	    min((int)floorf(fminf(time, launchParams.duration) *
+			    (float)launchParams.timeSteps/launchParams.duration),
 		launchParams.timeSteps - 1);
 
 	atomicAdd(
 	    &((float*)launchParams
-		  .outputBuffer)[flattenArrayLocationUint4(make_uint4(loc, t))],
+		  .outputbuffer)[flattenArrayLocationUint4(make_uint4(loc, t))],
 	    energy*medium_mua);	
 
 }
@@ -270,15 +271,15 @@ __device__ __forceinline__ void stepPhoton(mcx::VoxelPhoton& vp) {
 
 // starts a new photon from the ray source
 __device__ __forceinline__ void resetPhoton(mcx::VoxelPhoton& vp) {
-	vp.origin = launchParams.emitterPosition;
-	vp.manifold = launchParams.startManifold;
-	vp.direction = launchParams.emitterDirection;
+	vp.origin = launchParams.srcpos;
+	vp.manifold = launchParams.gashandle0;
+	vp.direction = launchParams.srcdir;
 	vp.elapsedTime = 0;
 	vp.scatteringEventCount = 0;
 	vp.scatteringLengthLeft =
 	    vp.random.exponential(1.0, std::numeric_limits<float>::epsilon());
 	vp.energy = 1.0f;
-	vp.currentMedium = launchParams.startMedium;
+	vp.currentMedium = launchParams.mediumid0;
 }
 
 
@@ -422,7 +423,7 @@ extern "C" __global__ void __raygen__rg() {
 		
 		// if a photon escapes or time of flight reaches the limit
 		if (!(vp.manifold != (OptixTraversableHandle) nullptr &&
-		      vp.elapsedTime < launchParams.simulationDuration &&
+		      vp.elapsedTime < launchParams.duration &&
 		      allLessThan(vx, make_uint3(256, 256, 256)))) {
 			resetPhoton(vp);
 			lastVoxel = floor(vp.origin);
