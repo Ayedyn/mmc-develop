@@ -33,7 +33,7 @@ typedef struct __attribute__((aligned(16))) MMC_Parameter {
     float tstart, tend;
     float Rtstep;
     int maxgate;
-    unsigned int mediumid0;             /**< initial medium type */
+    uint32_t mediumid0;             /**< initial medium type */
 
     uint isreflect;
     int outputtype;
@@ -45,12 +45,12 @@ typedef struct __attribute__((aligned(16))) MMC_Parameter {
 
     // Fields for IMMC optix (Consoliate in the future):
     uint3 dataSize;
-    CUdeviceptr surfaceBoundaries; // device pointer to a vector of surface boundaries 
+    CUdeviceptr surfaceBoundaries; // device pointer to a vector of PrimitiveSurfaceData 
     // for IMMC primitives 
     CUdeviceptr curveData; // device pointer to a vector of curve geometry
     float duration;
     int timeSteps;
-    unsigned int num_inside_prims;
+    uint32_t num_inside_prims;
     float WIDTH_ADJ;
     // Fields for IMMC optix ^^^^^^^^^^^^^^^^^^^^^^    
 
@@ -61,7 +61,13 @@ struct __attribute__((aligned(16))) TriangleMeshSBTData {
     OptixTraversableHandle *nbgashandle;
 };
 
-// Alias for IMMC usage with triangles, capsules, and spheres:
-using PrimitiveSurfaceData = TriangleMeshSBTData;
+// Struct for IMMC with single fnorm and handle instead of pointers
+// with triangles, capsules, and spheres:
+// for a sphere's normal,
+// record the center position, for a capsule use 0,0,0 to denote capsule
+struct __attribute__((aligned(16))) PrimitiveSurfaceData {
+    float4 fnorm;
+    OptixTraversableHandle nbgashandle;    
+};
 
 #endif

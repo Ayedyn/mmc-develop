@@ -16,7 +16,6 @@
 
 #include "mmc_optix_launchparam.h"
 #include "voxel_photon.h"
-#include "surface_boundary.h"
 #include "implicit_curve.h"
 
 constexpr float C_MM_PER_US = 299792.458;
@@ -101,9 +100,9 @@ __device__ __forceinline__ unsigned int getTimeFrame(const float &tof) {
 
 // gets a reference to a surface boundary struct via a primitive id in launch
 // params, which is a devicebuffer
-__device__ __forceinline__ mcx::SurfaceBoundary& getSurfaceBoundary(
+__device__ __forceinline__ PrimitiveSurfaceData& getSurfaceBoundary(
     int primIdx) {
-	return ((mcx::SurfaceBoundary*)launchParams.surfaceBoundaries)[primIdx];
+	return ((PrimitiveSurfaceData*)launchParams.surfaceBoundaries)[primIdx];
 }
 
 __device__ __forceinline__ Medium& getMediumFromID(int id) {
@@ -477,7 +476,7 @@ extern "C" __global__ void __closesthit__ch() {
 
 	float tm = fmaxf(1.0 / 8192.0, optixGetRayTmax() - ESCAPE_BIAS);
 	float scatDist = tm * medium.mus;
-	mcx::SurfaceBoundary& boundary =
+	PrimitiveSurfaceData& boundary =
 	    getSurfaceBoundary(optixGetPrimitiveIndex());
 
 	pl.origin += tm * pl.direction;
@@ -487,16 +486,17 @@ extern "C" __global__ void __closesthit__ch() {
 	if(threadnum<0){
 		 printf("\n*** Closest hit found at: x: %f y: %f z: %f t: %f ***\n",
 	 pl.origin.x, pl.origin.y, pl.origin.z, pl.elapsedTime);
-		 printf("Material updated from %d to %d\n", pl.currentMedium, boundary.medium);	
+		 printf("Material updated from %d to %d\n", pl.currentMedium, 
+                 __float_as_uint(boundary.fnorm.w));	
 	}
 
-	pl.manifold = boundary.manifold;
+	pl.manifold = boundary.nbgashandle;
 	pl.scatteringLengthLeft -= scatDist;
 	pl.elapsedTime += tm * C_US_PER_MM * medium.n;
 	// printf("The medium's absorption used was: %f\n", medium.mua);
 	pl.energy *= expf(-medium.mua * tm);
 
-	pl.currentMedium = boundary.medium;
+	pl.currentMedium = __float_as_uint(boundary.fnorm.w);
 
 	Medium newmedium = getMediumFromID(pl.currentMedium);
 

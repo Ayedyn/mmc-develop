@@ -12,13 +12,13 @@
 // added this for memcpy
 #include <algorithm>
 #include <cstring>
+#include <cuda_runtime.h>
 #include "incbin.h"
 #include "shader_pipeline.h"
 #include "tetrahedral_mesh.h"
 #include "util.h"
 #include "device_buffer.h"
-#include "surface_boundary.h"
-
+#include "mmc_optix_launchparam.h"
 
 // this includes lots of optix features
 #ifndef NDEBUG
@@ -30,6 +30,13 @@ INCTXT(mmcShaderPtx, mmcShaderPtxSize, "mcx_core.ptx");
 #define SPHERE_MATERIAL 1
 
 namespace mcx {
+
+// store bits of uint into float for later retrieval from device-code
+float storeuintAsFloat(unsigned int myUint) {
+    float storedFloat;
+    std::memcpy(&storedFloat, &myUint, sizeof(float));  // Bitwise copy uint to float
+    return storedFloat;  // Return the stored float
+}
 
 static DeviceByteBuffer createAccelerationStructure(
     OptixDeviceContext ctx, OptixTraversableHandle& handle, int primitiveOffset,
@@ -525,7 +532,7 @@ static OptixTraversableHandle generateManifoldWithSpheres(
 // their acceleration structures.
 static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
     OptixDeviceContext ctx, TetrahedralMesh& mesh,
-    std::vector<SurfaceBoundary>& surfaceData,
+    std::vector<PrimitiveSurfaceData>& surfaceData,
     std::vector<ImplicitCurve>& curveData, \
 			std::vector<OptixTraversableHandle>& handles,
     uint32_t& startTetMedium, OptixTraversableHandle& startHandle,
@@ -581,7 +588,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 	// ask douglas about weird ordering of these loops:
 	// outside manifolds, inside implicits, inside manifolds,
 	// outside implicits
-	surfaceData = std::vector<SurfaceBoundary>();
+	surfaceData = std::vector<PrimitiveSurfaceData>();
 
 	// record curve info to pass to the device
 	curveData = std::vector<ImplicitCurve>();
@@ -592,8 +599,9 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 	for (int i = 0; i < manifolds.size(); i++) {
 		// add all curves to the surface boundaries
 		for (ImplicitCurve s : manifolds[i].curves) {
-			surfaceData.push_back(SurfaceBoundary{
-			    SPHERE_MATERIAL, insideSphereHandles[i]});
+		    float4 facenorm_and_mediumid = make_float4(0,0,0, storeuintAsFloat(SPHERE_MATERIAL));	
+            surfaceData.push_back(PrimitiveSurfaceData{
+			    facenorm_and_mediumid, insideSphereHandles[i]});
 			curveData.push_back(s);
 		}
 
@@ -603,8 +611,10 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 
 		// add all spheres to the surface boundaries
 		for (ImplicitSphere s : manifolds[i].spheres) {
-			surfaceData.push_back(SurfaceBoundary{
-			    SPHERE_MATERIAL, insideSphereHandles[i]});
+			float4 facenorm_and_mediumid = make_float4(s.position.x, s.position.y, s.position.z,
+                       storeuintAsFloat(SPHERE_MATERIAL));
+            surfaceData.push_back(PrimitiveSurfaceData{
+                facenorm_and_mediumid, insideSphereHandles[i]});
 		}
 
 #ifndef NDEBUG
@@ -614,12 +624,17 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 		// assigns all manifold triangles a material
 		for (TetrahedronBoundary b : manifolds[i].triangles) {
 			if (b.manifold > 0) {
-				surfaceData.push_back(SurfaceBoundary{
-				    manifolds[b.manifold - 1].material,
+                // TODO: add actual triangle normals to this
+                float4 facenorm_and_mediumid = make_float4(0,0,0,
+                            storeuintAsFloat(manifolds[b.manifold-1].material));
+				surfaceData.push_back(PrimitiveSurfaceData{
+                    facenorm_and_mediumid,
 				    handles[b.manifold - 1]});
 			} else {
-				surfaceData.push_back(SurfaceBoundary{
-				    0, (OptixTraversableHandle) nullptr});
+		        float4 facenorm_and_mediumid = make_float4(0,0,0,storeuintAsFloat(0));
+                OptixTraversableHandle nullhandle = (OptixTraversableHandle) nullptr;
+                surfaceData.push_back(PrimitiveSurfaceData{
+				    facenorm_and_mediumid, nullhandle});
 			}
 		}
 #ifndef NDEBUG
@@ -630,9 +645,10 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 
 	for (int i = 0; i < manifolds.size(); i++) {
 		for (ImplicitCurve c : manifolds[i].curves) {
-			surfaceData.push_back(
-			    SurfaceBoundary{
-			      0,
+			float4 facenorm_and_mediumid = make_float4(0,0,0,storeuintAsFloat(0));
+            surfaceData.push_back(
+			    PrimitiveSurfaceData{
+                  facenorm_and_mediumid,
 			      handles[i]});
 
 		}
@@ -640,9 +656,11 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 			printf("\n number of outside-curves sent to device: %d", manifolds[i].curves.size());	
 #endif
 		for (ImplicitSphere s : manifolds[i].spheres) {
-			surfaceData.push_back(
-			    SurfaceBoundary{
-			     0, handles[i]});
+			float4 facenorm_and_mediumid = make_float4(
+                    s.position.x, s.position.y, s.position.z, storeuintAsFloat(0));
+            surfaceData.push_back(
+                			    PrimitiveSurfaceData{
+			     facenorm_and_mediumid, handles[i]});
 		}
 
 #ifndef NDEBUG
@@ -651,13 +669,19 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 
 		for (TetrahedronBoundary b : manifolds[i].triangles) {
 			if (b.manifold > 0) {
-				surfaceData.push_back(SurfaceBoundary{
-				    SPHERE_MATERIAL,
+                float4 facenorm_and_mediumid = make_float4(0,0,0,
+                        storeuintAsFloat(SPHERE_MATERIAL));
+                surfaceData.push_back(PrimitiveSurfaceData{
+				    facenorm_and_mediumid,
 				    insideSphereHandles[b.manifold - 1]});
 
 			} else {
-				surfaceData.push_back(SurfaceBoundary{
-				    0, (OptixTraversableHandle) nullptr});
+                float4 facenorm_and_mediumid = make_float4(0,0,0,
+                        storeuintAsFloat(0));
+			    OptixTraversableHandle nullhandle = (OptixTraversableHandle) nullptr;	
+                surfaceData.push_back(PrimitiveSurfaceData{
+                    facenorm_and_mediumid,
+				    nullhandle});
 			    // TODO: figure out if this should be the mesh material instead of 0
                 // this may be to account for surfaces of exiting the domain?	
 			}
@@ -784,7 +808,7 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 		    "There must be at least one time step.");
 	}
 
-	std::vector<SurfaceBoundary> triangleData;
+	std::vector<PrimitiveSurfaceData> triangleData;
 	std::vector<ImplicitCurve> curveData;
 	std::vector<OptixTraversableHandle> handles;
 
@@ -814,12 +838,12 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 // print surface data for debugging
 #ifndef NDEBUG
 	for (unsigned int i=0; i<triangleData.size(); ++i){
-		printf("\nThe %dth surface has a material of %d\n", i, triangleData[i].medium);
+		printf("\nThe %dth surface has a material of %d\n", i, triangleData[i].fnorm.w);
 	}	
 #endif	
 
 	// triangleData is a vector of surface boundaries
-	DeviceBuffer<SurfaceBoundary> boundary = DeviceBuffer<SurfaceBoundary>(
+	DeviceBuffer<PrimitiveSurfaceData> primitive_data = DeviceBuffer<PrimitiveSurfaceData>(
 	    triangleData.data(), triangleData.size());
 	DeviceBuffer<ImplicitCurve> curves =
 	    DeviceBuffer<ImplicitCurve>(curveData.data(), curveData.size());
@@ -851,7 +875,7 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
         // uint3 dimensions of simulation
 	    paras.dataSize = size; 
         // CUdeviceptr for vector of surface boundaries
-        paras.surfaceBoundaries = boundary.handle(); 
+        paras.surfaceBoundaries = primitive_data.handle(); 
         // CUdeviceptr for vector of capsules 
         paras.curveData = curves.handle(); 
         // CUdeviceptr for flattened 4D output array

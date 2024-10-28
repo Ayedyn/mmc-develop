@@ -37,7 +37,10 @@ namespace mcx {
 		McxContext();
 		McxContext(McxContext&& src);
 
-		void simulate(TetrahedralMesh& mesh, uint3 size, std::vector<Medium> media, uint32_t pcount, float duration, uint32_t timeSteps, float3 pos, float3 dir);
+		void simulate(TetrahedralMesh& mesh, uint3 size,
+                std::vector<Medium> media, uint32_t pcount,
+                float duration, uint32_t timeSteps,
+                float3 pos, float3 dir);
 
 		~McxContext();
 	};
