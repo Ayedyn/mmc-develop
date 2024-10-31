@@ -26,9 +26,12 @@ typedef struct __attribute__((aligned(16))) MMC_Parameter {
 
     float3 srcpos;
     float3 srcdir;
+
+    // parameters of dual grid
     float3 nmin; // minimum corner coordinates of dual grid
     float3 nmax; // maximum corner coordinates of dual grid
-    uint4 crop0;
+    uint4 crop0; // remainder of dual grid in 3d space and time?
+
     float dstep;
     float tstart, tend;
     float Rtstep;

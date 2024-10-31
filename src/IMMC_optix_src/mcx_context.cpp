@@ -19,6 +19,8 @@
 #include "util.h"
 #include "device_buffer.h"
 #include "mmc_optix_launchparam.h"
+#include "mmc_utils.h"
+#include "mmc_mesh.h"
 
 // this includes lots of optix features
 #ifndef NDEBUG
@@ -872,6 +874,51 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 	printf("\n THE NUMBER OF INSIDE PRIMS BEFORE SENDING TO GPU: %d", num_inside_prims);
 	// prepare optix pipeline parameters
 	MMCParam paras;
+
+        // TODO: Implement front-end for MMC instead of temporarily
+        // hardcoding optix-MMC variables
+        paras.tstart = 0;
+        paras.tend = 5e-9;
+        paras.Rtstep = 5e-10;
+
+        paras.maxgate = 10; // this is the last time gate 
+        
+        // prepare dual mesh parameters
+        // TODO: make this into a function for IMMC with Dual-grid boundaries increased for
+        // capsules/spheres outside of mesh
+        paras.dstep = 1; // distance step for output is currently hardcoded to 1mm
+        paras.nmin = make_float3(VERY_BIG, VERY_BIG, VERY_BIG);
+        paras.nmax = make_float3(-VERY_BIG, -VERY_BIG, -VERY_BIG);
+
+        for (int i = 0; i<mesh.nodes.size(); i++){
+            paras.nmin.x = MIN(mesh.nodes[i].x, paras.nmin.x);
+            paras.nmin.y = MIN(mesh.nodes[i].y, paras.nmin.y);
+            paras.nmin.z = MIN(mesh.nodes[i].z, paras.nmin.z);
+            paras.nmax.x = MAX(mesh.nodes[i].x, paras.nmax.x);
+            paras.nmax.y = MAX(mesh.nodes[i].y, paras.nmax.y);
+            paras.nmax.z = MAX(mesh.nodes[i].z, paras.nmax.z); 
+        }
+
+        paras.nmin.x -= EPS;
+        paras.nmin.y -= EPS;
+        paras.nmin.z -= EPS;
+        paras.nmax.x -= EPS;
+        paras.nmax.y -= EPS;
+        paras.nmax.z -= EPS;
+
+        int dim_x = (int)((paras.nmax.x - paras.nmin.x) / paras.dstep);
+        int dim_y = (int)((paras.nmax.y - paras.nmin.y) / paras.dstep);
+        int dim_z = (int)((paras.nmax.z - paras.nmin.z) / paras.dstep);
+
+        paras.crop0.x = dim_x;
+        paras.crop0.y = dim_x*dim_y;
+        paras.crop0.z = dim_x*dim_y*dim_z;
+        // TODO: did not implement the cfg->nbuffer feature that is used to prevent racing?
+        paras.crop0.w = paras.crop0.z * paras.maxgate;
+        
+        paras.isreflect = 0; // turn reflection settings off for now
+        paras.outputtype = otEnergy;
+
         // uint3 dimensions of simulation
 	    paras.dataSize = size; 
         // CUdeviceptr for vector of surface boundaries

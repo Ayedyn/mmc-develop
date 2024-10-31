@@ -47,8 +47,14 @@ __device__ __forceinline__ void launchPhoton(optixray &r, mcx::Random &rng) {
  * @brief Move a photon one step forward
  */
 __device__ __forceinline__ void movePhoton(optixray &r, mcx::Random &rng) {
-    optixTrace(r.gashandle, r.p0, r.dir, 0.0f, r.slen / gcfg.medium[r.mediumid].mus,
-        0.0f, OptixVisibilityMask(255), OptixRayFlags::OPTIX_RAY_FLAG_CULL_FRONT_FACING_TRIANGLES, 0, 1, 0,
+    optixTrace(r.gashandle,
+            r.p0,
+            r.dir,
+            0.0f, 
+            r.slen / gcfg.medium[r.mediumid].mus,
+            0.0f, 
+            OptixVisibilityMask(255), 
+            OptixRayFlags::OPTIX_RAY_FLAG_CULL_FRONT_FACING_TRIANGLES, 0, 1, 0,
         *(uint32_t*)&(r.p0.x), *(uint32_t*)&(r.p0.y), *(uint32_t*)&(r.p0.z),
         *(uint32_t*)&(r.dir.x), *(uint32_t*)&(r.dir.y), *(uint32_t*)&(r.dir.z),
         *(uint32_t*)&(r.slen), *(uint32_t*)&(r.weight), *(uint32_t*)&(r.photontimer),

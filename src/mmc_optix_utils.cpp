@@ -306,6 +306,9 @@ void prepLaunchParams(mcconfig* cfg, tetmesh* mesh, GPUInfo* gpu, OptixParams *o
 
     // upload launch parameters to device
     optixcfg->launchParamsBuffer.alloc_and_upload(&optixcfg->launchParams, 1);
+
+    // print launchparams for debug:
+    print_MMCParam(optixcfg->launchParams);
 }
 
 /**************************************************************************
