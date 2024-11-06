@@ -1,5 +1,6 @@
 #include "mcx_context.h"
 #include <cuda_runtime.h>
+#include "CUDABuffer.h"
 #include <optix.h>
 #include <optix_function_table_definition.h>
 #include <optix_stubs.h>
@@ -22,11 +23,12 @@
 #include "mmc_utils.h"
 #include "mmc_mesh.h"
 
+
 // this includes lots of optix features
 #ifndef NDEBUG
-INCTXT(mmcShaderPtx, mmcShaderPtxSize, "mcx_core.ptx")
+INCTXT(mmcShaderPtx, mmcShaderPtxSize, "mmc_optix_core.ptx")
 #else
-INCTXT(mmcShaderPtx, mmcShaderPtxSize, "mcx_core.ptx");
+INCTXT(mmcShaderPtx, mmcShaderPtxSize, "mmc_optix_core.ptx");
 #endif
 
 #define SPHERE_MATERIAL 1
@@ -742,7 +744,7 @@ McxContext::McxContext() {
 	     ShaderFunctionSet::HitGroup("__closesthit__ch", "") 
 	     },
 
-	    "launchParams");
+	    "gcfg");
 	
 	unsigned int TOTAL_PARAM_COUNT = 18;
 
@@ -850,13 +852,8 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 	DeviceBuffer<ImplicitCurve> curves =
 	    DeviceBuffer<ImplicitCurve>(curveData.data(), curveData.size());
 
-	// initializing variables for output of data
-	size_t ods = size.x * size.y * size.z;
-	size_t outputDs = ods * timeSteps;
-	float* od = new float[outputDs]();
-	DeviceBuffer<float> outputBuffer = DeviceBuffer<float>(od, outputDs);
-
-	cudaDeviceProp prop;
+    // get hardware info
+    cudaDeviceProp prop;
 	cudaGetDeviceProperties(&prop, 0);
 	
 	// Get the number of SMs (streaming multiprocessors)
@@ -866,95 +863,118 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 
     	// Calculate the total number of threads
     	unsigned int launchWidth = (numSMs-1) * maxThreadsPerSM;
-	
+
+// TODO: get rid of thjis temp singlethreading:
+//        launchWidth = 1;
 	// set number of threads and photons per thread:
 	unsigned int threadphoton = pcount / launchWidth;	
 	unsigned int oddphoton = pcount - threadphoton * launchWidth;
 
 	printf("\n THE NUMBER OF INSIDE PRIMS BEFORE SENDING TO GPU: %d", num_inside_prims);
 	// prepare optix pipeline parameters
-	MMCParam paras;
+	MMCParam gcfg;
 
         // TODO: Implement front-end for MMC instead of temporarily
         // hardcoding optix-MMC variables
-        paras.tstart = 0;
-        paras.tend = 5e-9;
-        paras.Rtstep = 5e-10;
+        gcfg.tstart = 0;
+        gcfg.tend = 5e-9;
+        gcfg.Rtstep = 5e-10;
 
-        paras.maxgate = 10; // this is the last time gate 
-        
+        gcfg.maxgate = 10; // this is the last time gate 
+
+
+        int totalthread = launchWidth;
+        //uint4 hseed[totalthread];
+        uint4* hseed = (uint4 *)calloc(totalthread, sizeof(uint4));
+        for (int i=0; i<totalthread; ++i){
+            hseed[i] = make_uint4(rand(), rand(), rand(), rand());
+        }
+
+        // prepare seed buffer
+        osc::CUDABuffer seedBuffer;
+        seedBuffer.alloc_and_upload(hseed, totalthread);
+        gcfg.seedbuffer = seedBuffer.d_pointer(); 
+
         // prepare dual mesh parameters
         // TODO: make this into a function for IMMC with Dual-grid boundaries increased for
         // capsules/spheres outside of mesh
-        paras.dstep = 1; // distance step for output is currently hardcoded to 1mm
-        paras.nmin = make_float3(VERY_BIG, VERY_BIG, VERY_BIG);
-        paras.nmax = make_float3(-VERY_BIG, -VERY_BIG, -VERY_BIG);
+        gcfg.dstep = 1; // distance step for output is currently hardcoded to 1mm
+        gcfg.nmin = make_float3(VERY_BIG, VERY_BIG, VERY_BIG);
+        gcfg.nmax = make_float3(-VERY_BIG, -VERY_BIG, -VERY_BIG);
 
         for (int i = 0; i<mesh.nodes.size(); i++){
-            paras.nmin.x = MIN(mesh.nodes[i].x, paras.nmin.x);
-            paras.nmin.y = MIN(mesh.nodes[i].y, paras.nmin.y);
-            paras.nmin.z = MIN(mesh.nodes[i].z, paras.nmin.z);
-            paras.nmax.x = MAX(mesh.nodes[i].x, paras.nmax.x);
-            paras.nmax.y = MAX(mesh.nodes[i].y, paras.nmax.y);
-            paras.nmax.z = MAX(mesh.nodes[i].z, paras.nmax.z); 
+            gcfg.nmin.x = MIN(mesh.nodes[i].x, gcfg.nmin.x);
+            gcfg.nmin.y = MIN(mesh.nodes[i].y, gcfg.nmin.y);
+            gcfg.nmin.z = MIN(mesh.nodes[i].z, gcfg.nmin.z);
+            gcfg.nmax.x = MAX(mesh.nodes[i].x, gcfg.nmax.x);
+            gcfg.nmax.y = MAX(mesh.nodes[i].y, gcfg.nmax.y);
+            gcfg.nmax.z = MAX(mesh.nodes[i].z, gcfg.nmax.z); 
         }
 
-        paras.nmin.x -= EPS;
-        paras.nmin.y -= EPS;
-        paras.nmin.z -= EPS;
-        paras.nmax.x -= EPS;
-        paras.nmax.y -= EPS;
-        paras.nmax.z -= EPS;
+        gcfg.nmin.x -= EPS;
+        gcfg.nmin.y -= EPS;
+        gcfg.nmin.z -= EPS;
+        gcfg.nmax.x -= EPS;
+        gcfg.nmax.y -= EPS;
+        gcfg.nmax.z -= EPS;
 
-        int dim_x = (int)((paras.nmax.x - paras.nmin.x) / paras.dstep);
-        int dim_y = (int)((paras.nmax.y - paras.nmin.y) / paras.dstep);
-        int dim_z = (int)((paras.nmax.z - paras.nmin.z) / paras.dstep);
+        int dim_x = (int)((gcfg.nmax.x - gcfg.nmin.x) / gcfg.dstep);
+        int dim_y = (int)((gcfg.nmax.y - gcfg.nmin.y) / gcfg.dstep);
+        int dim_z = (int)((gcfg.nmax.z - gcfg.nmin.z) / gcfg.dstep);
 
-        paras.crop0.x = dim_x;
-        paras.crop0.y = dim_x*dim_y;
-        paras.crop0.z = dim_x*dim_y*dim_z;
+        gcfg.crop0.x = dim_x;
+        gcfg.crop0.y = dim_x*dim_y;
+        gcfg.crop0.z = dim_x*dim_y*dim_z;
         // TODO: did not implement the cfg->nbuffer feature that is used to prevent racing?
-        paras.crop0.w = paras.crop0.z * paras.maxgate;
+        gcfg.crop0.w = gcfg.crop0.z * gcfg.maxgate;
         
-        paras.isreflect = 0; // turn reflection settings off for now
-        paras.outputtype = otEnergy;
+        gcfg.isreflect = 0; // turn reflection settings off for now
+        gcfg.outputtype = otEnergy;
+
+
+	    // initializing variables for output of data
+        unsigned int outputSize = (gcfg.crop0.w << 1);
+        float* outputHostBuffer = (float*) calloc(outputSize, sizeof(float));    
+        //float outputHostBuffer[outputSize];
+        osc::CUDABuffer outputBuffer;
+        outputBuffer.alloc_and_upload(outputHostBuffer, outputSize);
 
         // uint3 dimensions of simulation
-	    paras.dataSize = size; 
+	    gcfg.dataSize = size; 
         // CUdeviceptr for vector of surface boundaries
-        paras.surfaceBoundaries = primitive_data.handle(); 
+        gcfg.surfaceBoundaries = primitive_data.handle(); 
         // CUdeviceptr for vector of capsules 
-        paras.curveData = curves.handle(); 
+        gcfg.curveData = curves.handle(); 
         // CUdeviceptr for flattened 4D output array
-        paras.outputbuffer = outputBuffer.handle();
+        gcfg.outputbuffer = outputBuffer.d_pointer();
         // float for duration in milliseconds 
-        paras.duration = duration; 
+        gcfg.duration = duration; 
         // int for number of time steps 
-        paras.timeSteps = timeSteps;
+        gcfg.timeSteps = timeSteps;
         // float3 for starting position of ray
-        paras.srcpos = pos; 
+        gcfg.srcpos = pos; 
         // float3 for vector of starting ray direction 
-        paras.srcdir = dir; 
+        gcfg.srcdir = dir; 
         // copy from vector into C style array
         // of Medium structs in order for simulation
         for (size_t i = 0; i < media.size(); ++i) {
-             paras.medium[i] = media[i]; // Copy each element
+             gcfg.medium[i] = media[i]; // Copy each element
         } 
         // starting OptixTraversableHandle 
-        paras.gashandle0 = startHandle;
+        gcfg.gashandle0 = startHandle;
         // uint32_t index of the starting Medium
-	    paras.mediumid0 = startMedium; 
+	    gcfg.mediumid0 = startMedium; 
         // unsigned int describing number of GAS primitives for out-in tracing 
-        paras.num_inside_prims = num_inside_prims;
+        gcfg.num_inside_prims = num_inside_prims;
         // float for marginal difference in radii for out-in 
         // vs in-out primitives 
-        paras.WIDTH_ADJ = WIDTH_ADJ;
+        gcfg.WIDTH_ADJ = WIDTH_ADJ;
         // unsigned int for number of photons per thread
-        paras.threadphoton = threadphoton; 
+        gcfg.threadphoton = threadphoton; 
         // unsigned int for remainder after dividing between threads 
-        paras.oddphoton = oddphoton;
+        gcfg.oddphoton = oddphoton;
 
-	DeviceBuffer<MMCParam> paraBuffer(paras);
+	DeviceBuffer<MMCParam> paraBuffer(gcfg);
 
 	std::cout << "Beginning simulation." << std::endl;
 	std::chrono::steady_clock::time_point begin =
@@ -968,12 +988,49 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 	// photoncount.
 	OPTIX_CHECK(optixLaunch(this->devicePipeline.handle(), nullptr, \
 			paraBuffer.handle(),
-				sizeof(paras), &this->SBT, launchWidth,
+				sizeof(gcfg), &this->SBT, launchWidth,
 				1, 1));
 
-	outputBuffer.read(od);
+    printf("\nsim completed successfully");
 
-	std::chrono::steady_clock::time_point end =
+    // download from GPU the outputted data
+	outputBuffer.download(outputHostBuffer, outputSize);
+    printf("\nbuffer downloaded successfully");
+    double* TEMPweight;
+    TEMPweight = (double*)calloc(sizeof(double) * gcfg.crop0.z, gcfg.maxgate);
+    // ==================================================================
+    // Save output
+    // ==================================================================
+    for (size_t i = 0; i < gcfg.crop0.w; i++) {
+        // combine two outputs into one
+        #pragma omp atomic
+        TEMPweight[i] += outputHostBuffer[i] +
+            outputHostBuffer[i + gcfg.crop0.w];
+    }
+
+    // ==================================================================
+    // normalize output
+    // ==================================================================
+    /*if (cfg->isnormalized) {
+        // not used if cfg->method == rtBLBadouelGrid
+        float energyabs = 0.0f;
+        // for now assume initial weight of each photon is 1.0
+        int energytot = pcount;
+        mesh_normalize(mesh, cfg, energyabs, energytot, 0);
+    }*/
+
+    #pragma omp master
+    {
+    int datalen = gcfg.crop0.z;
+    FILE* fp;
+
+    fp = fopen("optix.bin", "wb");
+    fwrite(TEMPweight, sizeof(double), datalen*gcfg.maxgate, fp);
+    fclose(fp);
+
+    }
+    
+    std::chrono::steady_clock::time_point end =
 	    std::chrono::steady_clock::now();
 	std::cout << "Simulation time = "
 		  << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -981,32 +1038,6 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 			 .count()
 		  << "[ms]" << std::endl;
 
-	// normalize output:
-	// temporary code:
-	/*
-	isnoramlized = true;
-	if (isnormalized){
-		mesh_normalize(mesh, cfg, cfg->energyabs, pcount, 0);
-	}
-	*/
-
-	// loop through and write data to binary file
-	for (int qq = 0; qq < ods; qq++) {
-		if (od[qq] < 0) {
-			float fluff = od[qq];
-			throw std::runtime_error("There is an error ");
-		}
-	}
-
-	for (int i = 0; i < timeSteps; i++) {
-		std::ofstream out;
-		out.open("attenuation_" + std::to_string(i) + ".bin",
-			 std::ios::out | std::ios::binary);
-		out.write((char*)(od + i * ods), ods * sizeof(float));
-		out.close();
-	}
-
-	delete[] od;
 }
 
 void McxContext::onMessageReceived(uint32_t level, const char* tag,
@@ -1022,7 +1053,8 @@ void McxContext::messageHandler(uint32_t level, const char* tag,
 
 McxContext::~McxContext() {
 	//this->deviceSbt = ShaderBindingTable<void*, void*, void*>();
-	this->devicePipeline = ShaderPipeline();
+     
+    this->devicePipeline = ShaderPipeline();
 	optixDeviceContextDestroy(this->optixContext);
 	cudaDeviceSynchronize();
 }

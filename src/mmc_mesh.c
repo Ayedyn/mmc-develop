@@ -1295,7 +1295,6 @@ void mesh_saveweight(tetmesh* mesh, mcconfig* cfg, int isref) {
             }
         }
     }
-
     fclose(fp);
 }
 
