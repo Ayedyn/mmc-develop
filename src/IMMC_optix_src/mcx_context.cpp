@@ -23,7 +23,6 @@
 #include "mmc_utils.h"
 #include "mmc_mesh.h"
 
-
 // this includes lots of optix features
 #ifndef NDEBUG
 INCTXT(mmcShaderPtx, mmcShaderPtxSize, "mmc_optix_core.ptx")
@@ -40,6 +39,13 @@ float storeuintAsFloat(unsigned int myUint) {
     float storedFloat;
     std::memcpy(&storedFloat, &myUint, sizeof(float));  // Bitwise copy uint to float
     return storedFloat;  // Return the stored float
+}
+
+// store bits of uint into float for later retrieval from device-code
+unsigned int storeFloatAsuint(float myFloat) {
+    unsigned int storedUint;
+    std::memcpy(&storedUint, &myFloat, sizeof(unsigned int));  // Bitwise copy uint to float
+    return storedUint;  // Return the stored float
 }
 
 static DeviceByteBuffer createAccelerationStructure(
@@ -842,7 +848,7 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 // print surface data for debugging
 #ifndef NDEBUG
 	for (unsigned int i=0; i<triangleData.size(); ++i){
-		printf("\nThe %dth surface has a material of %d\n", i, triangleData[i].fnorm.w);
+		printf("\nThe %dth surface has a material of %d\n", i, storeFloatAsuint(triangleData[i].fnorm.w));
 	}	
 #endif	
 
