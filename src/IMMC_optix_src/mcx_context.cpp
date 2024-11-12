@@ -235,9 +235,6 @@ static DeviceByteBuffer createSphereAccelerationStructure(
 	buildInput.sphereArray.radiusStrideInBytes = 0;
 	buildInput.sphereArray.flags = sphere_input_flags;
 	buildInput.sphereArray.numSbtRecords = 1;
-	//buildInput.sphereArray.sbtIndexOffsetBuffer = sbtIndexOffsets.handle();
-	//buildInput.sphereArray.sbtIndexOffsetSizeInBytes = sizeof(int32_t);
-	//buildInput.sphereArray.sbtIndexOffsetStrideInBytes = 0;
 	buildInput.sphereArray.primitiveIndexOffset = primitiveOffset;
 	buildInput.sphereArray.singleRadius = false;
 
@@ -640,6 +637,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 				surfaceData.push_back(PrimitiveSurfaceData{
                     facenorm_and_mediumid,
 				    handles[b.manifold - 1]});
+                printf("\nTriangle Boundary Material ID is: %f",  storeuintAsFloat(manifolds[b.manifold-1].material));
 			} else {
 		        float4 facenorm_and_mediumid = make_float4(0,0,0,storeuintAsFloat(0));
                 OptixTraversableHandle nullhandle = (OptixTraversableHandle) nullptr;
@@ -655,7 +653,8 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 
 	for (int i = 0; i < manifolds.size(); i++) {
 		for (ImplicitCurve c : manifolds[i].curves) {
-			float4 facenorm_and_mediumid = make_float4(0,0,0,storeuintAsFloat(0));
+			float4 facenorm_and_mediumid = make_float4(0,0,0,
+                    storeuintAsFloat(2));
             surfaceData.push_back(
 			    PrimitiveSurfaceData{
                   facenorm_and_mediumid,
@@ -667,7 +666,8 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 #endif
 		for (ImplicitSphere s : manifolds[i].spheres) {
 			float4 facenorm_and_mediumid = make_float4(
-                    s.position.x, s.position.y, s.position.z, storeuintAsFloat(0));
+                    s.position.x, s.position.y, s.position.z, 
+                    storeuintAsFloat(2));
             surfaceData.push_back(
                 			    PrimitiveSurfaceData{
 			     facenorm_and_mediumid, handles[i]});

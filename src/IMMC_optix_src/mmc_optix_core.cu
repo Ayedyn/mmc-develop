@@ -431,7 +431,6 @@ __device__ __forceinline__ float2 get_inf_cyl_intersections(const float3 vertex1
 
 // intersection test for curve primitives
 extern "C" __global__ void __intersection__customlinearcurve(){
-    return;
 
     // 1. initialize variables for geometry
     int primIdx = optixGetPrimitiveIndex();

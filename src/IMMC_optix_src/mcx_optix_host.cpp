@@ -330,7 +330,7 @@ mcx::TetrahedralMesh sphere_curve_test() {
 
 	uint32_t k = 0;
 	for (uint4 elem : elements) {
-		uint32_t label = 0;
+		uint32_t label = 1;
 
 		tets.push_back(
 		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
@@ -345,7 +345,7 @@ mcx::TetrahedralMesh sphere_curve_test() {
 	// define curves to simulate
 	std::vector<mcx::ImplicitCurve> curves =
 	    std::vector<mcx::ImplicitCurve>();
-	curves.push_back({make_float3(10, 30, 15), make_float3(40, 30, 15), 5});
+	curves.push_back({make_float3(10, 30, 15), make_float3(40, 30, 15), 10});
 
 	mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
 	    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
@@ -358,7 +358,6 @@ mcx::TetrahedralMesh sphere_curve_test() {
 	return mesh;
 }
 
-
 mcx::TetrahedralMesh immc_comparison_sphere() {
 	std::vector<uint4> elements = {
 	    make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
@@ -368,7 +367,7 @@ mcx::TetrahedralMesh immc_comparison_sphere() {
 	std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
 
 	// setting the material id to the background material
-	uint32_t material_id = 0;
+	uint32_t material_id = 1;
 	for (uint4 elem : elements) {
 		tets.push_back(
 		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
@@ -403,7 +402,7 @@ mcx::TetrahedralMesh immc_comparison_cylinder() {
 	std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
 
 	// setting the material id to the background material
-	uint32_t material_id = 0;
+	uint32_t material_id = 1;
 	for (uint4 elem : elements) {
 		tets.push_back(
 		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
@@ -438,11 +437,12 @@ int main() {
 		
 		mcx::TetrahedralMesh mesh = sphere_curve_test();
 
+        Medium row0_media = {0, 0, 1, 1};
         Medium row1_media = {0.000458, 0.356541, 0.9, 1.37};
         Medium row2_media = {0.230543, 0.093985, 0.9, 1.37};
 
 		std::vector<Medium> media = {
-            row1_media, row2_media};
+            row0_media, row1_media, row2_media};
 
 		uint3 size = make_uint3(60, 60, 60);
 
