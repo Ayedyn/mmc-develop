@@ -904,7 +904,7 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
         // prepare dual mesh parameters
         // TODO: make this into a function for IMMC with Dual-grid boundaries increased for
         // capsules/spheres outside of mesh
-        gcfg.dstep = 1; // distance step for output is currently hardcoded to 1mm
+        gcfg.dstep = 0.01; // distance step for output is currently hardcoded to 0.01mm
         gcfg.nmin = make_float3(VERY_BIG, VERY_BIG, VERY_BIG);
         gcfg.nmax = make_float3(-VERY_BIG, -VERY_BIG, -VERY_BIG);
 

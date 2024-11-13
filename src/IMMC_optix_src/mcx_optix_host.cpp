@@ -78,7 +78,7 @@ mcx::TetrahedralMesh basic_cube_test() {
 
 	uint32_t k = 0;
 	for (uint4 elem : elements) {
-		uint32_t label = 0;
+		uint32_t label = 1;
 
 		tets.push_back(
 		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
@@ -117,7 +117,7 @@ mcx::TetrahedralMesh sphereshaped_curve_test() {
 
 	uint32_t k = 0;
 	for (uint4 elem : elements) {
-		uint32_t label = 0;
+		uint32_t label = 1;
 
 		tets.push_back(
 		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
@@ -160,7 +160,7 @@ mcx::TetrahedralMesh basic_curve_test() {
 
 	uint32_t k = 0;
 	for (uint4 elem : elements) {
-		uint32_t label = 0;
+		uint32_t label = 1;
 
 		tets.push_back(
 		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
@@ -190,6 +190,7 @@ mcx::TetrahedralMesh basic_curve_test() {
 
 	return mesh;
 }
+
 // benchmark made to match IMMC test
 mcx::TetrahedralMesh immc_sphere_benchmark(){
 	std::vector<uint4> elements = {
@@ -202,7 +203,7 @@ mcx::TetrahedralMesh immc_sphere_benchmark(){
 
 	uint32_t k = 0;
 	for (uint4 elem : elements) {
-		uint32_t label = 0;
+		uint32_t label = 1;
 
 		tets.push_back(
 		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
@@ -211,25 +212,23 @@ mcx::TetrahedralMesh immc_sphere_benchmark(){
 		k++;
 	}
 
-
 	// define spheres to simulate
 	std::vector<mcx::ImplicitSphere> spheres =
 	    std::vector<mcx::ImplicitSphere>();
-	spheres.push_back({make_float3(50, 50, 50), 10});
+	spheres.push_back({make_float3(0.5, 0.5, 0.5), 0.1});
 	
 	// define placeholder curves to simulate
 	std::vector<mcx::ImplicitCurve> curves =
 	    std::vector<mcx::ImplicitCurve>();
 
-	curves.push_back({make_float3(90,90,90), make_float3(90,90,90.5), 0.0001});
+	curves.push_back({make_float3(1,1,0), make_float3(1, 1, 0.00001), 0.0001});
 	
-
 	mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
-	    std::vector<float3>({make_float3(0, 0, 0), make_float3(100, 0, 0),
-				 make_float3(0, 100, 0), make_float3(100, 100, 0),
-				 make_float3(0, 0, 100), make_float3(100, 0, 100),
-				 make_float3(0, 100, 100),
-				 make_float3(100, 100, 100)}),
+	    std::vector<float3>({make_float3(0, 0, 0), make_float3(1, 0, 0),
+				 make_float3(0, 1, 0), make_float3(1, 1, 0),
+				 make_float3(0, 0, 1), make_float3(1, 0, 1),
+				 make_float3(0, 1, 1),
+				 make_float3(1, 1, 1)}),
 	    tets, spheres, curves);
 
 	return mesh;
@@ -247,7 +246,7 @@ mcx::TetrahedralMesh basic_sphere_test() {
 
 	uint32_t k = 0;
 	for (uint4 elem : elements) {
-		uint32_t label = 0;
+		uint32_t label = 1;
 
 		tets.push_back(
 		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
@@ -288,7 +287,7 @@ mcx::TetrahedralMesh complex_test() {
 
 	uint32_t k = 0;
 	for (uint4 elem : elements) {
-		uint32_t label = 0;
+		uint32_t label = 1;
 
 		tets.push_back(
 		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
@@ -433,18 +432,18 @@ mcx::TetrahedralMesh immc_comparison_cylinder() {
 // main function
 int main() {
 	try {
-		//mcx::TetrahedralMesh mesh = immc_sphere_benchmark();
+		mcx::TetrahedralMesh mesh = immc_sphere_benchmark();
 		
-		mcx::TetrahedralMesh mesh = sphere_curve_test();
+		//mcx::TetrahedralMesh mesh = sphere_curve_test();
 
         Medium row0_media = {0, 0, 1, 1};
-        Medium row1_media = {0.000458, 0.356541, 0.9, 1.37};
-        Medium row2_media = {0.230543, 0.093985, 0.9, 1.37};
+        Medium row1_media = {0.0458, 35.6541, 0.9, 1.37};
+        Medium row2_media = {23.0543, 9.3985, 0.9, 1.37};
 
 		std::vector<Medium> media = {
             row0_media, row1_media, row2_media};
 
-		uint3 size = make_uint3(60, 60, 60);
+		uint3 size = make_uint3(1, 1, 1);
 
 		mcx::McxContext ctx = mcx::McxContext();
 
@@ -454,10 +453,10 @@ int main() {
 
 		constexpr uint32_t photon_count = 100000000;//1<<26;
 		constexpr float duration = 0.005;
-		constexpr uint32_t timesteps = 1;
+		constexpr uint32_t timesteps = 10;
 
-		float3 srcpos = make_float3(30, 30, 0.001);
-		float3 srcdir = make_float3(0, 0, 1);
+		float3 srcpos = make_float3(0.5, 0.5, 0.9999);
+		float3 srcdir = make_float3(0, 0, -1);
 
 		ctx.simulate(mesh, size, media, photon_count, duration,
 			     timesteps, srcpos, srcdir);

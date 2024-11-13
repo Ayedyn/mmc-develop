@@ -126,10 +126,12 @@ __device__ __forceinline__ uint subToInd(const uint3 &idx3d) {
 /**
  * @brief Get the index of the voxel that encloses p
  */
+//TODO: check if it should be divided by dstep here or if dstep should be larger for small voxels
 __device__ __forceinline__ uint getVoxelIdx(const float3 &p) {
-    return subToInd(make_uint3(p.x > 0.0f ? __float2int_rd(min(p.x, gcfg.nmax.x) * gcfg.dstep) : 0,
-                              p.y > 0.0f ? __float2int_rd(min(p.y, gcfg.nmax.y) * gcfg.dstep) : 0,
-                              p.z > 0.0f ? __float2int_rd(min(p.z, gcfg.nmax.z) * gcfg.dstep) : 0));
+    // converts float 2 int with rounding down:
+    return subToInd(make_uint3(p.x > 0.0f ? __float2int_rd(min(p.x, gcfg.nmax.x) / gcfg.dstep) : 0,
+                              p.y > 0.0f ? __float2int_rd(min(p.y, gcfg.nmax.y) / gcfg.dstep) : 0,
+                              p.z > 0.0f ? __float2int_rd(min(p.z, gcfg.nmax.z) / gcfg.dstep) : 0));
 }
 
 /**
