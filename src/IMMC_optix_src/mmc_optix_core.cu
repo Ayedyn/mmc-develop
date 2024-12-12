@@ -317,6 +317,7 @@ extern "C" __global__ void __closesthit__ch() {
     uint origmed = r.mediumid;
     OptixTraversableHandle origgashandle = r.gashandle;
     r.mediumid = __float_as_uint(fnorm.w);
+
     r.gashandle = surfaceData.nbgashandle;
 
     // update ray direction at mismatched boundary

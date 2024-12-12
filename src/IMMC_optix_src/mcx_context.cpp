@@ -260,12 +260,9 @@ static DeviceByteBuffer createSphereAccelerationStructure(
 	    tempBuffer.handle(), sizes.tempSizeInBytes, outputBuffer.handle(),
 	    sizes.outputSizeInBytes, &handle, &emitProperty, 1));
 
-
 #ifndef NDEBUG
 	printf("\nBuilt an optix acceleration structure of type: sphere");
 #endif
-
-
 
 	size_t compactSize;
 	compactedSize.read(&compactSize);
@@ -377,7 +374,7 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 	for (ImplicitCurve curve : manifold.curves) {
 		curveVertices.push_back(curve.vertex1);
 		curveVertices.push_back(curve.vertex2);
-		curveWidths.push_back(curve.width + curveWidthAdjustment);
+		curveWidths.push_back(curve.width - curveWidthAdjustment);
 		sbt.push_back(0);
 		// the index should be the current count of curves*2
 		// (vertices per curve)+1
@@ -411,7 +408,7 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 	// Sphere coordinates and radii is inside of tetrahedral manifold
 	for (ImplicitSphere sphere : manifold.spheres) {
 		sphereCenters.push_back(sphere.position);
-		sphereRadii.push_back(sphere.radius + sphereRadiusAdjustment);
+		sphereRadii.push_back(sphere.radius - sphereRadiusAdjustment);
 		sbt.push_back(0);
 	}
 
@@ -710,6 +707,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
     startTetMedium =
 	    manifolds[tetrahedron_to_manifold[startTetMedium]].material;
 
+    printf("\n Starting Material is: %d", startTetMedium);
 	return result;
 }
 
@@ -838,7 +836,7 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 	std::cout << "Starting element is:" << startMedium << std::endl;
 
 	unsigned int num_inside_prims;
-	const float WIDTH_ADJ = 1.0 / 1024.0;
+	const float WIDTH_ADJ = 1.0 / 10240.0;
 	// accelerationStructures variable isn't actually used anywhere,
 	// function modifies almost everything by reference
 	    generateTetrahedralAccelerationStructures(
@@ -904,7 +902,7 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
         // prepare dual mesh parameters
         // TODO: make this into a function for IMMC with Dual-grid boundaries increased for
         // capsules/spheres outside of mesh
-        gcfg.dstep = 0.01; // distance step for output is currently hardcoded to 0.01mm
+        gcfg.dstep = 1; // distance step for output is currently hardcoded to 0.01mm
         gcfg.nmin = make_float3(VERY_BIG, VERY_BIG, VERY_BIG);
         gcfg.nmax = make_float3(-VERY_BIG, -VERY_BIG, -VERY_BIG);
 
@@ -935,7 +933,7 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
         gcfg.crop0.w = gcfg.crop0.z * gcfg.maxgate;
         
         gcfg.isreflect = 0; // turn reflection settings off for now
-        gcfg.outputtype = otEnergy;
+        gcfg.outputtype = otFluence;//otEnergy;
 
 
 	    // initializing variables for output of data

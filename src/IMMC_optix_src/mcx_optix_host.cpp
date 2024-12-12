@@ -221,7 +221,7 @@ mcx::TetrahedralMesh immc_sphere_benchmark(){
 	std::vector<mcx::ImplicitCurve> curves =
 	    std::vector<mcx::ImplicitCurve>();
 
-	curves.push_back({make_float3(1,1,0), make_float3(1, 1, 0.00001), 0.0001});
+	curves.push_back({make_float3(1,1,1), make_float3(1, 1, 1.00001), 0.0001});
 	
 	mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
 	    std::vector<float3>({make_float3(0, 0, 0), make_float3(1, 0, 0),
@@ -258,13 +258,13 @@ mcx::TetrahedralMesh basic_sphere_test() {
 	// define spheres to simulate
 	std::vector<mcx::ImplicitSphere> spheres =
 	    std::vector<mcx::ImplicitSphere>();
-	spheres.push_back({make_float3(30, 30, 15), 10});
+	spheres.push_back({make_float3(30, 30, 30), 10});
 	// define placeholder curves to simulate
 	std::vector<mcx::ImplicitCurve> curves =
 	    std::vector<mcx::ImplicitCurve>();
-
 	curves.push_back({make_float3(55,54,58), make_float3(55,55,58), 0.001});
-	mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
+	
+    mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
 	    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
 				 make_float3(0, 60, 0), make_float3(60, 60, 0),
 				 make_float3(0, 0, 60), make_float3(60, 0, 60),
@@ -432,18 +432,21 @@ mcx::TetrahedralMesh immc_comparison_cylinder() {
 // main function
 int main() {
 	try {
-		mcx::TetrahedralMesh mesh = immc_sphere_benchmark();
-		
-		//mcx::TetrahedralMesh mesh = sphere_curve_test();
+		//mcx::TetrahedralMesh mesh = immc_sphere_benchmark();
+	    mcx::TetrahedralMesh mesh = basic_sphere_test();	
+	    Medium sphere_test_media1 = {0.002, 1.0, 0.01, 1.37};
+        Medium sphere_test_media2 = {0.050, 5.0, 0.9, 1.37};   
+        
+        //mcx::TetrahedralMesh mesh = sphere_curve_test();
 
         Medium row0_media = {0, 0, 1, 1};
-        Medium row1_media = {0.0458, 35.6541, 0.9, 1.37};
-        Medium row2_media = {23.0543, 9.3985, 0.9, 1.37};
+        //Medium row1_media = {0.0458, 35.6541, 0.9, 1.37};
+        //Medium row2_media = {23.0543, 9.3985, 0.9, 1.37};
 
 		std::vector<Medium> media = {
-            row0_media, row1_media, row2_media};
+            row0_media, sphere_test_media1, sphere_test_media2};
 
-		uint3 size = make_uint3(1, 1, 1);
+		uint3 size = make_uint3(60, 60, 60);
 
 		mcx::McxContext ctx = mcx::McxContext();
 
@@ -455,8 +458,8 @@ int main() {
 		constexpr float duration = 0.005;
 		constexpr uint32_t timesteps = 10;
 
-		float3 srcpos = make_float3(0.5, 0.5, 0.9999);
-		float3 srcdir = make_float3(0, 0, -1);
+		float3 srcpos = make_float3(30, 30, 0.001);
+		float3 srcdir = make_float3(0, 0, 1);
 
 		ctx.simulate(mesh, size, media, photon_count, duration,
 			     timesteps, srcpos, srcdir);
