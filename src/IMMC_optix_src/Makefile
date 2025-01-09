@@ -39,9 +39,9 @@ MKDIR=mkdir
 CUDART=-lcudart
 ## c++ compiler and compiler options
 CXX ?=g++
-##CPPOPT=-g -Wall -O3 -DNDEBUG
+CPPOPT=-g -Wall -O3 -DNDEBUG
 ## for debug version
-CPPOPT=-g -Wall -O3
+##CPPOPT=-g -Wall -O3
 
 AR=g++
 

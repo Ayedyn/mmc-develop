@@ -145,11 +145,8 @@ mcx::TetrahedralMesh sphereshaped_curve_test() {
 	return mesh;
 }
 
-
-
-
-// Test code generating cube shaped mesh with curve inside it
-mcx::TetrahedralMesh basic_curve_test() {
+// Test code generating cube shaped mesh with capsule inside it
+mcx::TetrahedralMesh basic_capsule_test() {
 	std::vector<uint4> elements = {
 	    make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
 	    make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
@@ -171,15 +168,14 @@ mcx::TetrahedralMesh basic_curve_test() {
 	// define placeholder spheres to simulate
 	std::vector<mcx::ImplicitSphere> spheres =
 	    std::vector<mcx::ImplicitSphere>();
+    //placeholder sphere
+    spheres.push_back({make_float3(60, 60, 60), 0.0001});
 	// define curves to simulate
 	std::vector<mcx::ImplicitCurve> curves =
 	    std::vector<mcx::ImplicitCurve>();
 
-	// for testing intersections in matlab:
-//	curves.push_back({make_float3(1, 30, 2), make_float3(59, 30, 2), 1});
-
-	// diagonal curve near the source
-	curves.push_back({make_float3(30, 15, 15), make_float3(30, 45, 15), 10});
+    //capsule:
+	curves.push_back({make_float3(30, 15, 30), make_float3(30, 45, 30), 10});
 	mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
 	    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
 				 make_float3(0, 60, 0), make_float3(60, 60, 0),
@@ -432,10 +428,10 @@ mcx::TetrahedralMesh immc_comparison_cylinder() {
 // main function
 int main() {
 	try {
-		//mcx::TetrahedralMesh mesh = immc_sphere_benchmark();
-	    mcx::TetrahedralMesh mesh = basic_sphere_test();	
-	    Medium sphere_test_media1 = {0.002, 1.0, 0.01, 1.37};
-        Medium sphere_test_media2 = {0.050, 5.0, 0.9, 1.37};   
+		mcx::TetrahedralMesh mesh = basic_sphere_test(); // simple test for comparing MMC and optix-iMMC
+	    //mcx::TetrahedralMesh mesh = basic_capsule_test(); // simple test for comparing MMC and optix-iMMC	
+	    Medium sphere_test_media1 = {0.002, 1.0, 0.01, 1.37}; // also same materials for capsule
+        Medium sphere_test_media2 = {0.050, 5.0, 0.9, 1.37};  // also same materials for capsule 
         
         //mcx::TetrahedralMesh mesh = sphere_curve_test();
 

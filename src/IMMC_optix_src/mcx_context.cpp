@@ -30,7 +30,7 @@ INCTXT(mmcShaderPtx, mmcShaderPtxSize, "mmc_optix_core.ptx")
 INCTXT(mmcShaderPtx, mmcShaderPtxSize, "mmc_optix_core.ptx");
 #endif
 
-#define SPHERE_MATERIAL 1
+#define SPHERE_MATERIAL 2
 
 namespace mcx {
 
@@ -616,7 +616,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 		// add all spheres to the surface boundaries
 		for (ImplicitSphere s : manifolds[i].spheres) {
 			float4 facenorm_and_mediumid = make_float4(s.position.x, s.position.y, s.position.z,
-                       storeuintAsFloat(SPHERE_MATERIAL));
+                       storeuintAsFloat(1));
             surfaceData.push_back(PrimitiveSurfaceData{
                 facenorm_and_mediumid, insideSphereHandles[i]});
 		}
@@ -651,7 +651,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 	for (int i = 0; i < manifolds.size(); i++) {
 		for (ImplicitCurve c : manifolds[i].curves) {
 			float4 facenorm_and_mediumid = make_float4(0,0,0,
-                    storeuintAsFloat(2));
+                    storeuintAsFloat(1)); // TODO: currently hardcoding exiting photons as 1 materialID
             surfaceData.push_back(
 			    PrimitiveSurfaceData{
                   facenorm_and_mediumid,
@@ -664,7 +664,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 		for (ImplicitSphere s : manifolds[i].spheres) {
 			float4 facenorm_and_mediumid = make_float4(
                     s.position.x, s.position.y, s.position.z, 
-                    storeuintAsFloat(2));
+                    storeuintAsFloat(SPHERE_MATERIAL)); // TODO: currently hardcoding exiting photons as 1 materialID
             surfaceData.push_back(
                 			    PrimitiveSurfaceData{
 			     facenorm_and_mediumid, handles[i]});
