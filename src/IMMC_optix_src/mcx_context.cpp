@@ -34,6 +34,15 @@ INCTXT(mmcShaderPtx, mmcShaderPtxSize, "mmc_optix_core.ptx");
 
 namespace mcx {
 
+struct MCX_clock {
+    std::chrono::system_clock::time_point starttime;
+    MCX_clock() : starttime(std::chrono::system_clock::now()) {}
+    double elapse() {
+        std::chrono::duration<double> elapsetime = (std::chrono::system_clock::now() - starttime);
+        return elapsetime.count() * 1000.;
+    }
+};
+
 // store bits of uint into float for later retrieval from device-code
 float storeuintAsFloat(unsigned int myUint) {
     float storedFloat;
@@ -610,24 +619,24 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 		}
 
 #ifndef NDEBUG
-			printf("\n number of inside-curves sent to device: %d", manifolds[i].curves.size());	
+			printf("\n number of outside-curves sent to device: %d", manifolds[i].curves.size());	
 #endif
 
 		// add all spheres to the surface boundaries
 		for (ImplicitSphere s : manifolds[i].spheres) {
 			float4 facenorm_and_mediumid = make_float4(s.position.x, s.position.y, s.position.z,
-                       storeuintAsFloat(1));
+                       storeuintAsFloat(manifolds[i].material)); // TODO: replace with manifold material
             surfaceData.push_back(PrimitiveSurfaceData{
                 facenorm_and_mediumid, insideSphereHandles[i]});
 		}
 
 #ifndef NDEBUG
-			printf("\n number of inside-spheres sent to device: %d", manifolds[i].spheres.size());	
+			printf("\n number of outside-spheres sent to device: %d", manifolds[i].spheres.size());	
 #endif
 
 		// assigns all manifold triangles a material
 		for (TetrahedronBoundary b : manifolds[i].triangles) {
-			if (b.manifold > 0) {
+			if (b.manifold > 0) { // manifold 0 is used to track exiting the domain
                 // TODO: add actual triangle normals to this
                 float4 facenorm_and_mediumid = make_float4(0,0,0,
                             storeuintAsFloat(manifolds[b.manifold-1].material));
@@ -635,7 +644,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
                     facenorm_and_mediumid,
 				    handles[b.manifold - 1]});
                 printf("\nTriangle Boundary Material ID is: %f",  storeuintAsFloat(manifolds[b.manifold-1].material));
-			} else {
+			} else { // track photons exiting the domain
 		        float4 facenorm_and_mediumid = make_float4(0,0,0,storeuintAsFloat(0));
                 OptixTraversableHandle nullhandle = (OptixTraversableHandle) nullptr;
                 surfaceData.push_back(PrimitiveSurfaceData{
@@ -643,7 +652,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 			}
 		}
 #ifndef NDEBUG
-			printf("\n number of inside-triangles sent to device: %d", manifolds[i].triangles.size());	
+			printf("\n number of outside-triangles sent to device: %d", manifolds[i].triangles.size());	
 #endif
 
 	}
@@ -651,7 +660,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 	for (int i = 0; i < manifolds.size(); i++) {
 		for (ImplicitCurve c : manifolds[i].curves) {
 			float4 facenorm_and_mediumid = make_float4(0,0,0,
-                    storeuintAsFloat(1)); // TODO: currently hardcoding exiting photons as 1 materialID
+                    storeuintAsFloat(manifolds[i].material)); // TODO: currently hardcoding exiting photons as 1 materialID
             surfaceData.push_back(
 			    PrimitiveSurfaceData{
                   facenorm_and_mediumid,
@@ -659,7 +668,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 
 		}
 #ifndef NDEBUG
-			printf("\n number of outside-curves sent to device: %d", manifolds[i].curves.size());	
+			printf("\n number of inside-curves sent to device: %d", manifolds[i].curves.size());	
 #endif
 		for (ImplicitSphere s : manifolds[i].spheres) {
 			float4 facenorm_and_mediumid = make_float4(
@@ -671,7 +680,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 		}
 
 #ifndef NDEBUG
-			printf("\n number of outside-spheres sent to device: %d", manifolds[i].spheres.size());	
+			printf("\n number of inside-spheres sent to device: %d", manifolds[i].spheres.size());	
 #endif
 
 		for (TetrahedronBoundary b : manifolds[i].triangles) {
@@ -694,7 +703,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 			}
 		}
 	#ifndef NDEBUG
-			printf("\n number of outside-triangles sent to device: %d", manifolds[i].triangles.size());	
+			printf("\n number of inside-triangles sent to device: %d", manifolds[i].triangles.size());	
 	#endif
 	}
 
@@ -804,6 +813,131 @@ McxContext::McxContext(McxContext&& src) {
 	src.devicePipeline = ShaderPipeline();
 }
 
+// calculates if the ray is starting in an implicit structure
+bool checkStartInImplicit(tetmesh* mesh, mcconfig* cfg){
+    return false;
+}
+
+MMCParam prepOptixIMMCLaunchParams(mcconfig* cfg, tetmesh* mesh, GPUInfo* gpu,
+                                    std::vector<PrimitiveSurfaceData> triangleData, 
+                                    std::vector<ImplicitCurve> curveData){
+        MMCParam gcfg;
+
+        // TODO: Implement front-end for MMC instead of temporarily
+        // hardcoding optix-MMC variables
+        gcfg.tstart = cfg->tstart;
+        gcfg.tend = cfg->tend;
+        gcfg.Rtstep = 1.0f / cfg->tstep;
+        gcfg.maxgate = cfg->maxgate; // this is the last time gate 
+
+        // prepare dual mesh parameters
+        // TODO: make this into a function for IMMC with Dual-grid boundaries increased for
+        // capsules/spheres outside of mesh
+        gcfg.dstep = 1.0f / cfg->unitinmm; // distance step for output is currently hardcoded to 0.01mm
+        gcfg.nmin = make_float3(mesh->nmin.x, mesh->nmin.y, mesh->nmin.z);
+        gcfg.nmax = make_float3(mesh->nmax.x-mesh->nmin.x,
+                                mesh->nmax.y-mesh->nmin.y,
+                                mesh->nmax.z-mesh->nmin.z);
+
+        gcfg.crop0.x = cfg->crop0.x;
+        gcfg.crop0.y = cfg->crop0.y;
+        gcfg.crop0.z = cfg->crop0.z;
+
+        int timeSteps = (int)((cfg->tend - cfg->tstart) / cfg->tstep + 0.5);
+        gcfg.crop0.w = cfg->crop0.z * timeSteps;
+        
+        gcfg.isreflect = cfg->isreflect; // turn reflection settings off for now
+        gcfg.outputtype = static_cast<int>(cfg->outputtype);
+
+        // initializing variables for output of data
+        unsigned int outputSize = (gcfg.crop0.w << 1);
+        float* outputHostBuffer = (float*) calloc(outputSize, sizeof(float));    
+        //float outputHostBuffer[outputSize];
+        osc::CUDABuffer outputBuffer;
+        outputBuffer.alloc_and_upload(outputHostBuffer, outputSize);
+
+	    // triangleData is a vector of surface boundaries
+	    DeviceBuffer<PrimitiveSurfaceData> primitive_data = 
+            DeviceBuffer<PrimitiveSurfaceData>(triangleData.data(), triangleData.size());
+	    DeviceBuffer<ImplicitCurve> curves =
+	        DeviceBuffer<ImplicitCurve>(curveData.data(), curveData.size());
+
+        // uint3 dimensions of simulation
+	    //gcfg.dataSize = size; 
+        // CUdeviceptr for vector of surface boundaries
+        gcfg.surfaceBoundaries = primitive_data.handle(); 
+        // CUdeviceptr for vector of capsules 
+        gcfg.curveData = curves.handle(); 
+        // CUdeviceptr for flattened 4D output array
+        gcfg.outputbuffer = outputBuffer.d_pointer();
+        // float for duration in milliseconds 
+        //gcfg.duration = duration; 
+        // int for number of time steps 
+        //gcfg.timeSteps = timeSteps;
+        // float3 for starting position of ray
+        gcfg.srcpos = make_float3(cfg->srcpos.x,
+                                  cfg->srcpos.y,
+                                  cfg->srcpos.z); 
+        // float3 for vector of starting ray direction 
+        gcfg.srcdir = make_float3(cfg->srcdir.x,
+                                  cfg->srcdir.y,
+                                  cfg->srcdir.z); 
+        
+        // starting OptixTraversableHandle 
+        //TODO:gcfg.gashandle0 = startHandle;
+        // uint32_t index of the starting Medium
+	    //TODO:gcfg.mediumid0 = startMedium; 
+        // calculate medium ID
+        bool notStartingInImplicit = !checkStartInImplicit(mesh, cfg);
+        gcfg.mediumid0 = notStartingInImplicit ? mesh->type[cfg->e0-1] : SPHERE_MATERIAL;
+
+        // Media
+        for (int i = 0; i <= mesh->prop; ++i) {
+            gcfg.medium[i].mua = mesh->med[i].mua;
+            gcfg.medium[i].mus = mesh->med[i].mus;
+            gcfg.medium[i].g = mesh->med[i].g;
+            gcfg.medium[i].n = mesh->med[i].n;
+        }
+
+        // get hardware info
+        cudaDeviceProp prop;
+    	cudaGetDeviceProperties(&prop, 0);
+	
+    	// Get the number of SMs (streaming multiprocessors)
+        unsigned int numSMs = prop.multiProcessorCount;
+        // Get the maximum number of threads per SM
+        unsigned int maxThreadsPerSM = prop.maxThreadsPerMultiProcessor;
+        // Calculate the total number of threads
+        unsigned int launchWidth = (numSMs-1) * maxThreadsPerSM;
+
+	    // set number of threads and photons per thread:
+	    unsigned int threadphoton = cfg->nphoton / launchWidth;	
+	    unsigned int oddphoton = cfg->nphoton - threadphoton * launchWidth;
+
+        // unsigned int describing number of GAS primitives for out-in tracing 
+        // TODO: calculate this
+        //gcfg.num_inside_prims = num_inside_prims;
+        // float for marginal difference in radii for out-in 
+        // vs in-out primitives 
+        gcfg.WIDTH_ADJ = 1.0 / 10240.0;
+        // unsigned int for number of photons per thread
+        gcfg.threadphoton = threadphoton; 
+        // unsigned int for remainder after dividing between threads 
+        gcfg.oddphoton = oddphoton;
+
+        int totalthread = launchWidth;
+        //uint4 hseed[totalthread];
+        uint4* hseed = (uint4 *)calloc(totalthread, sizeof(uint4));
+        for (int i=0; i<totalthread; ++i){
+            hseed[i] = make_uint4(rand(), rand(), rand(), rand());
+        }
+
+        // prepare seed buffer
+        osc::CUDABuffer seedBuffer;
+        seedBuffer.alloc_and_upload(hseed, totalthread);
+        gcfg.seedbuffer = seedBuffer.d_pointer(); 
+}
+
 // this function is run by the main and performs the mmc-optix simulation given
 // a mesh, voxel grid size for absorption counts, vector of media optical
 // properties, photon count etc.
@@ -867,6 +1001,7 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 
     	// Calculate the total number of threads
     	unsigned int launchWidth = (numSMs-1) * maxThreadsPerSM;
+
 
 // TODO: get rid of thjis temp singlethreading:
 //        launchWidth = 1;
@@ -944,7 +1079,7 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
         outputBuffer.alloc_and_upload(outputHostBuffer, outputSize);
 
         // uint3 dimensions of simulation
-	    gcfg.dataSize = size; 
+	    //gcfg.dataSize = size; 
         // CUdeviceptr for vector of surface boundaries
         gcfg.surfaceBoundaries = primitive_data.handle(); 
         // CUdeviceptr for vector of capsules 
@@ -961,6 +1096,7 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
         gcfg.srcdir = dir; 
         // copy from vector into C style array
         // of Medium structs in order for simulation
+     
         for (size_t i = 0; i < media.size(); ++i) {
              gcfg.medium[i] = media[i]; // Copy each element
         } 
@@ -981,8 +1117,8 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 	DeviceBuffer<MMCParam> paraBuffer(gcfg);
 
 	std::cout << "Beginning simulation." << std::endl;
-	std::chrono::steady_clock::time_point begin =
-	    std::chrono::steady_clock::now();
+
+    MCX_clock timer;
 
 	// OPTIX_CHECK reports if there were errors with the sim
 	// optixLaunch launches photons, given a pipeline, stream, pipeline
@@ -995,10 +1131,10 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 				sizeof(gcfg), &this->SBT, launchWidth,
 				1, 1));
 
-    printf("\nsim completed successfully");
-
     // download from GPU the outputted data
 	outputBuffer.download(outputHostBuffer, outputSize);
+    printf("\nsim completed successfully, photons per ms was %f \n", pcount/timer.elapse());
+    
     printf("\nbuffer downloaded successfully");
     double* TEMPweight;
     TEMPweight = (double*)calloc(sizeof(double) * gcfg.crop0.z, gcfg.maxgate);
@@ -1033,15 +1169,6 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
     fclose(fp);
 
     }
-    
-    std::chrono::steady_clock::time_point end =
-	    std::chrono::steady_clock::now();
-	std::cout << "Simulation time = "
-		  << std::chrono::duration_cast<std::chrono::milliseconds>(
-			 end - begin)
-			 .count()
-		  << "[ms]" << std::endl;
-
 }
 
 void McxContext::onMessageReceived(uint32_t level, const char* tag,
