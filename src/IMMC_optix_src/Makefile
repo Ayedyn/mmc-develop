@@ -20,9 +20,9 @@ OPTIX_HOME?=/home/users/aidenlewis/OptiX-7.6.0
 
 ## INCLUDEDIRS is a list of directories to search for other included makefiles
 ## Probably from other codebases like cuda??
-INCLUDEDIRS=-Izmat -Izmat/easylzma -Iubj -I$(CUDA_HOME)/include -I$(OPTIX_HOME)/include -I$(OPTIX_HOME)/SDK -I$(OPTIX_HOME)/SDK/support 
+INCLUDEDIRS=-Izmat -Ilz4 -Ieasylzma -Ieasylzma/pavlov -Izmat/easylzma -Iubj -I$(CUDA_HOME)/include -I$(OPTIX_HOME)/include -I$(OPTIX_HOME)/SDK -I$(OPTIX_HOME)/SDK/support 
 ## a symbolic link to cuda files?
-LINKOPT   ?=-L/usr/local/cuda/lib64 -lcudart -ldl
+LINKOPT   ?=-L/usr/local/cuda/lib64 -lcudart -ldl -lz
 
 ## GPU Architecture flag for generation on CUDA 11.0 for compatibility with V100 and T4 Turing cards
 CUGENCODE ?=-arch=sm_52
@@ -39,7 +39,7 @@ MKDIR=mkdir
 CUDART=-lcudart
 ## c++ compiler and compiler options
 CXX ?=g++
-CPPOPT=-g -Wall -O3 -DNDEBUG -DOPTIX_IMMC -DMMC_XORSHIFT
+CPPOPT=-g -Wall -O3 -DNDEBUG -DOPTIX_IMMC -DMCX_EMBED_CL -DMMC_XORSHIFT
 ## for debug version
 ##CPPOPT=-g -Wall -O3
 
@@ -50,8 +50,11 @@ PTXSUFFIX=.ptx
 
 ## Lines involving cuda and c++ files to compile
 CUDAFILES=mmc_optix_core
-CXXFILES=mcx_optix_host mcx_context shader_pipeline\
-tetrahedral_mesh
+CXXFILES=mmc mcx_context shader_pipeline\
+mmc_host mmc_utils mmc_mesh \
+mmc_highorder mmc_raytrace mmc_tictoc \
+ubj/ubjw cjson/cJSON zmat/easylzma/* zmat/zmat* 
+
 ## removed util and ubj/ubjw from cxxfiles mcx_bench and mcx_tictoc
 
 CXXOBJS   := $(addsuffix $(OBJSUFFIX), $(CXXFILES))

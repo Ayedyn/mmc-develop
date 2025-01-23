@@ -578,34 +578,10 @@ int main() {
 	try {
 
         MCX_clock timer;
-        //mcx::TetrahedralMesh mesh = basic_sphere_test(); // simple test for comparing MMC and optix-iMMC
-	    //mcx::TetrahedralMesh mesh = basic_capsule_test(); // simple test for comparing MMC and optix-iMMC	
-	    
-        //mcx::TetrahedralMesh mesh = overlapping_capsule_test(); // simple test for comparing MMC and optix-iMMC
-       
-        //mcx::TetrahedralMesh mesh = two_layered_cube_capsule_test();
-
-        Medium sphere_test_media1 = {0.002, 1.0, 0.01, 1.37}; // also same materials for capsule
-        Medium sphere_test_media2 = {0.050, 5.0, 0.9, 1.37};  // also same materials for capsule 
-        //Medium layer2_test_media3 = {0.1, 5.0, 0.9, 1.37}; 
-        //mcx::TetrahedralMesh mesh = sphere_curve_test();
-
-        Medium row0_media = {0, 0, 1, 1};
-        //Medium row1_media = {0.0458, 35.6541, 0.9, 1.37};
-        //Medium row2_media = {23.0543, 9.3985, 0.9, 1.37};
-
-		std::vector<Medium> media = {
-            row0_media, sphere_test_media1, sphere_test_media2};
-
-		uint3 size = make_uint3(60, 60, 60);
 
 		mcx::McxContext ctx = mcx::McxContext();
 
-		// bitshift operation to keep photon counts in factors of 2
-		// 1<<18 is 262144
-		// 1<<28 is 268435456
-
-		constexpr uint32_t photon_count = 100000000;//1<<26;
+		constexpr uint32_t photon_count = 100000000;
 		constexpr float duration = 0.005;
 		constexpr uint32_t timesteps = 10;
 
