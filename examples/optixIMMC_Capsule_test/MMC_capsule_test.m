@@ -48,7 +48,7 @@ cfg.isreflect=0;
 cfg.node = no;
 cfg.elem = el;
 cfg.outputtype = 'fluence';
-cfg.compute = 'optix';
+%cfg.compute = 'optix';
 
 fluence_MMC = mmclab(cfg);
 fluence_MMC = fluence_MMC.data;

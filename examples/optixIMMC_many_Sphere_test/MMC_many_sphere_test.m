@@ -1,30 +1,30 @@
-%% Prep a 60 by 60 by 60 mm cube with a 10mm sphere embedded
-% create a surface mesh for a 10 mm radius sphere
-[nsph1_3,fsph1_3]=meshasphere([20 30 30],3,1.0);
+%% Prep a 60 by 60 by 60 mm cube with a 3mm sphere embedded
+% create a surface mesh for a 3 mm radius sphere
+[nsph1_3,fsph1_3]=meshasphere([20 30 30],3,0.1);
 [nsph1_3,fsph1_3]=removeisolatednode(nsph1_3,fsph1_3);
 
-[nsph2_3,fsph2_3]=meshasphere([40 30 30],3,1.0);
+[nsph2_3,fsph2_3]=meshasphere([40 30 30],3,0.1);
 [nsph2_3,fsph2_3]=removeisolatednode(nsph2_3,fsph2_3);
 
-[nsph3_3,fsph3_3]=meshasphere([30 30 30],3,1.0);
+[nsph3_3,fsph3_3]=meshasphere([30 30 30],3,0.1);
 [nsph3_3,fsph3_3]=removeisolatednode(nsph3_3,fsph3_3);
 
-[nsph4_3,fsph4_3]=meshasphere([20 20 30],3,1.0);
+[nsph4_3,fsph4_3]=meshasphere([20 20 30],3,0.1);
 [nsph4_3,fsph4_3]=removeisolatednode(nsph4_3,fsph4_3);
 
-[nsph5_3,fsph5_3]=meshasphere([40 20 30],3,1.0);
+[nsph5_3,fsph5_3]=meshasphere([40 20 30],3,0.1);
 [nsph5_3,fsph5_3]=removeisolatednode(nsph5_3,fsph5_3);
 
-[nsph6_3,fsph6_3]=meshasphere([30 20 30],3,1.0);
+[nsph6_3,fsph6_3]=meshasphere([30 20 30],3,0.1);
 [nsph6_3,fsph6_3]=removeisolatednode(nsph6_3,fsph6_3);
 
-[nsph7_3,fsph7_3]=meshasphere([20 40 30],3,1.0);
+[nsph7_3,fsph7_3]=meshasphere([20 40 30],3,0.1);
 [nsph7_3,fsph7_3]=removeisolatednode(nsph7_3,fsph7_3);
 
-[nsph8_3,fsph8_3]=meshasphere([40 40 30],3,1.0);
+[nsph8_3,fsph8_3]=meshasphere([40 40 30],3,0.1);
 [nsph8_3,fsph8_3]=removeisolatednode(nsph8_3,fsph8_3);
 
-[nsph9_3,fsph9_3]=meshasphere([30 40 30],3,1.0);
+[nsph9_3,fsph9_3]=meshasphere([30 40 30],3,0.1);
 [nsph9_3,fsph9_3]=removeisolatednode(nsph9_3,fsph9_3);
 
 [nbox,ebox]=meshgrid6(0:60:60,0:60:60,0:60:60);
@@ -36,7 +36,7 @@ fbox=volface(ebox);
 
 [node, elem]=surf2mesh(no,fc,[0 0 0],[60 60 60],1,100,[1 1 1;20 30 30;30 30 30;40 30 30;20 20 30;30 20 30;40 20 30;20 40 30;30 40 30;40 40 30]);%thin layer
 %% set material of all spheres to 2
-
+elem((elem(:,5)~=1),5)=2;
 %% create simulation parameters
 %%-----------------------------------------------------------------
 clear cfg
@@ -55,9 +55,12 @@ cfg.debuglevel='TP';
 cfg.isreflect=0;
 cfg.node = node;
 cfg.elem = elem;
+cfg.compute = 'optix';
+%cfg.compute = 'opencl';
 cfg.outputtype = 'fluence';
-
+tic
 fluence_MMC = mmclab(cfg);
+toc
 fluence_MMC = fluence_MMC.data;
 
 mcxplotvol(log(fluence_MMC));
