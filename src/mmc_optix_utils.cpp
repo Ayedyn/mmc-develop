@@ -47,6 +47,7 @@ void optix_run_simulation(mcconfig* cfg, tetmesh* mesh, raytracer* tracer, GPUIn
         GetTimeMillis() - tic0);
     fflush(cfg->flog);
 
+    // create an array of surface meshes
     surfmesh *smesh = (surfmesh*)calloc((mesh->prop + 1), sizeof(surfmesh));
     prepareSurfMesh(mesh, smesh);
     unsigned int primitiveoffset = 0;
@@ -685,6 +686,7 @@ void buildSBT(tetmesh* mesh, surfmesh* smesh, OptixParams* optixcfg) {
         for (size_t j = 0; j < smesh[i].norm.size(); ++j) {
             fnorm.push_back(make_float4(smesh[i].norm[j].x, smesh[i].norm[j].y,
                 smesh[i].norm[j].z, *(float*)&smesh[i].nbtype[j]));
+            printf("The smesh number %d's %dth nbtype is: %d\n", i, j, smesh[i].nbtype[j]);
             nbgashandle.push_back(optixcfg->gashandles[smesh[i].nbtype[j]]);
         }
     }
