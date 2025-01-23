@@ -40,34 +40,49 @@
 
 #include <math.h>
 #include <stdio.h>
-#include "mmc_rand_posix.h"
+#include "mmc_rand_xorshift128p.h"
+#include "mmc_fastmath.h"
 
 #ifdef MMC_USE_SSE_MATH
     #include "sse_math/sse_math.h"
     #include <smmintrin.h>
 #endif
 
-#define LOG_RNG_MAX          22.1807097779182f
-#define INIT_MULT            1812433253
+#define LOG_RNG_MAX         22.1807097779182f
+#define IEEE754_DOUBLE_BIAS     0x3FF0000000000000ul /* Added to exponent.  */
+
+static float xorshift128p_nextf (RandType t[RAND_BUF_LEN]) {
+    union {
+        ulong  i;
+        float f[2];
+        uint  u[2];
+    } s1;
+    const ulong s0 = t[1];
+    s1.i = t[0];
+    t[0] = s0;
+    s1.i ^= s1.i << 23; // a
+    t[1] = s1.i ^ s0 ^ (s1.i >> 18) ^ (s0 >> 5); // b, c
+    s1.i = t[1] + s0;
+    s1.u[0] = 0x3F800000U | (s1.u[0] >> 9);
+
+    return s1.f[0] - 1.0f;
+}
+
+static void xorshift128p_seed (uint* seed, RandType t[RAND_BUF_LEN]) {
+    t[0] = (ulong)seed[0] << 32 | seed[1] ;
+    t[1] = (ulong)seed[2] << 32 | seed[3];
+}
 
 // transform into [0,1] random number
-__device__ float rand_uniform01(RandType t[RAND_BUF_LEN]) {
-    double ran;
-    ran = erand48(t);
-    return (float)ran;
+inlinefun float rand_uniform01(RandType t[RAND_BUF_LEN]) {
+    return xorshift128p_nextf(t);
 }
-__device__ void rng_init(RandType t[RAND_BUF_LEN], RandType tnew[RAND_BUF_LEN], uint* n_seed, int idx) {
-    unsigned short* si = (unsigned short*)(n_seed + idx * RAND_SEED_WORD_LEN);
-    t[0] = si[0];
-    t[1] = si[1];
-    t[2] = si[2];
-    erand48(t);
-    erand48(t);
-    erand48(t);
+inlinefun void rng_init(RandType t[RAND_BUF_LEN], RandType tnew[RAND_BUF_LEN], uint* n_seed, int idx) {
+    xorshift128p_seed(n_seed + idx * RAND_SEED_WORD_LEN, t);
 }
-__device__ void rand_need_more(RandType t[RAND_BUF_LEN], RandType tbuf[RAND_BUF_LEN]) {
+inlinefun void rand_need_more(RandType t[RAND_BUF_LEN], RandType tbuf[RAND_BUF_LEN]) {
 }
-//TODO: figure out what this is and why it's not findable
-//#include "rng_common.h"
+
+#include "mmc_rand_common.h"
 
 #endif

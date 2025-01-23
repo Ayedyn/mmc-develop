@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <optix.h>
 
+#include "mmc_mesh.h"
 #include "mmc_optix_launchparam.h"
 #include "shader_pipeline.h"
 #include "tetrahedral_mesh.h"
@@ -36,10 +37,10 @@ namespace mcx {
 	public:
 		McxContext();
 		McxContext(McxContext&& src);
-		void simulate(TetrahedralMesh& mesh, uint3 size,
+		void simulate(tetmesh* mesh, uint3 size,
                 std::vector<Medium> media, uint32_t pcount,
                 float duration, uint32_t timeSteps,
-                float3 pos, float3 dir);
+                float3 pos, float3 dir, mcconfig* cfg);
 
 		~McxContext();
 	};

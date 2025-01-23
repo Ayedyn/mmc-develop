@@ -283,6 +283,13 @@ typedef struct MMC_config {
     uint mediabyte;
     char* shapedata;    /**<a pointer points to a string defining the JSON-formatted shape data*/
     char jsonfile[MAX_PATH_LENGTH];/**<if the seed is specified as a file (mch), mcx will replay the photons*/
+
+    #ifdef OPTIX_IMMC 
+    float4* spheres;       /**< optix implicit spheres x, y, z (of center), radius */
+    float3* capsulecenters;/**< optix centers for capsule endpoints (two per capsule), x, y, z */
+    float* capsulewidths;  /**< optix widths for each capsule */
+    #endif
+
 } mcconfig;
 
 #ifdef  __cplusplus

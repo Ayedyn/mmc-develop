@@ -8,7 +8,7 @@
 
 #ifndef IMPLICIT_CURVE_H
 #define IMPLICIT_CURVE_H
-#include "implicit_curve.h"
+#include "implicit_geometries.h"
 #endif
 
 // This file introduces objects to represent several geometries for use in mmc-optix
@@ -22,14 +22,7 @@ namespace mcx {
 		uint32_t material;
 	};
 
-	// implicit sphere represented with position and radius
-	struct ImplicitSphere {
-	public:
-		float3 position;
-		float radius;
-	};
-
-	// Represents the triangle boundary between tetrahedrons belonging to different materials.
+    // Represents the triangle boundary between tetrahedrons belonging to different materials.
 	struct TetrahedronBoundary {
 	public:
 		// indices of nodes of the triangle

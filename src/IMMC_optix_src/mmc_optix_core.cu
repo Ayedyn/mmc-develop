@@ -7,7 +7,7 @@
 #include <optix_types.h>
 #include <sutil/vec_math.h>
 
-#include "implicit_curve.h"
+#include "implicit_geometries.h"
 #include "mmc_optix_ray.h"
 #include "mmc_optix_launchparam.h"
 

@@ -1,8 +1,8 @@
 #include "tetrahedral_mesh.h"
 
 #include <sutil/vec_math.h>
-#include <vector_functions.h>
-#include <vector_types.h>
+//#include <vector_functions.h>
+//#include <vector_types.h>
 #include <exception>
 #include <stdexcept>
 

@@ -6,12 +6,22 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <chrono>
 
 #include "device_buffer.h"
 #include "mcx_context.h"
 #include "mmc_optix_launchparam.h"
 
 #include "tetrahedral_mesh.h"
+
+struct MCX_clock {
+    std::chrono::system_clock::time_point starttime;
+    MCX_clock() : starttime(std::chrono::system_clock::now()) {}
+    double elapse() {
+        std::chrono::duration<double> elapsetime = (std::chrono::system_clock::now() - starttime);
+        return elapsetime.count() * 1000.;
+    }
+};
 
 // helps read binary files for meshes
 static std::vector<char> read_all_bytes(char const* filename) {
@@ -566,16 +576,18 @@ mcx::TetrahedralMesh immc_comparison_cylinder() {
 // main function
 int main() {
 	try {
-		//mcx::TetrahedralMesh mesh = basic_sphere_test(); // simple test for comparing MMC and optix-iMMC
+
+        MCX_clock timer;
+        //mcx::TetrahedralMesh mesh = basic_sphere_test(); // simple test for comparing MMC and optix-iMMC
 	    //mcx::TetrahedralMesh mesh = basic_capsule_test(); // simple test for comparing MMC and optix-iMMC	
 	    
         //mcx::TetrahedralMesh mesh = overlapping_capsule_test(); // simple test for comparing MMC and optix-iMMC
        
-        mcx::TetrahedralMesh mesh = two_layered_cube_capsule_test();
+        //mcx::TetrahedralMesh mesh = two_layered_cube_capsule_test();
 
         Medium sphere_test_media1 = {0.002, 1.0, 0.01, 1.37}; // also same materials for capsule
         Medium sphere_test_media2 = {0.050, 5.0, 0.9, 1.37};  // also same materials for capsule 
-        Medium layer2_test_media3 = {0.1, 5.0, 0.9, 1.37}; 
+        //Medium layer2_test_media3 = {0.1, 5.0, 0.9, 1.37}; 
         //mcx::TetrahedralMesh mesh = sphere_curve_test();
 
         Medium row0_media = {0, 0, 1, 1};
@@ -583,7 +595,7 @@ int main() {
         //Medium row2_media = {23.0543, 9.3985, 0.9, 1.37};
 
 		std::vector<Medium> media = {
-            row0_media, sphere_test_media1, sphere_test_media2, layer2_test_media3};
+            row0_media, sphere_test_media1, sphere_test_media2};
 
 		uint3 size = make_uint3(60, 60, 60);
 
@@ -597,11 +609,14 @@ int main() {
 		constexpr float duration = 0.005;
 		constexpr uint32_t timesteps = 10;
 
+        tetmesh mesh;
+        mcconfig cfg;
+
 		float3 srcpos = make_float3(30, 30, 0.001);
 		float3 srcdir = make_float3(0, 0, 1);
 
-		ctx.simulate(mesh, size, media, photon_count, duration,
-			     timesteps, srcpos, srcdir);
+		ctx.simulate(&mesh, size, media, photon_count, duration,
+			     timesteps, srcpos, srcdir, &cfg);
 
 		std::cout << "\nSimulation complete.\n";
 	} catch (std::runtime_error err) {
