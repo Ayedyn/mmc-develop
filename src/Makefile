@@ -2,7 +2,8 @@ ROOTDIR = ..
 BINARY=mmc
 
 FILES=mmc_rand_xorshift128p mmc_mesh mmc_raytrace mmc_utils mmc_tictoc mmc cjson/cJSON \
-      mmc_host mmc_highorder mmc_cl_utils mmc_cl_host ubj/ubjw mmc_optix_host mmc_cuda_query_gpu
+      mmc_host mmc_highorder mmc_cl_utils mmc_cl_host ubj/ubjw mmc_optix_host mmc_cuda_query_gpu mcx_context \
+	  shader_pipeline
 OPTIXFILES=mmc_optix_utils
 CLPROGRAM=mmc_core
 OPTIXPROGRAM=mmc_optix_core
@@ -14,7 +15,7 @@ endif
 
 DOXYCFG=mmc_doxygen.cfg
 
-USERCCFLAGS=-DUSE_OS_TIMER -DUSE_OPENCL -DMMC_XORSHIFT -DUSE_OPTIX -DNDEBUG
+USERCCFLAGS=-DUSE_OS_TIMER -DUSE_OPENCL -DMMC_XORSHIFT -DUSE_OPTIX -DOPTIX_IMMC -DNDEBUG
 
 DUMMY:=$(shell mkdir -p built/cjson)
 

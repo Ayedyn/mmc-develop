@@ -7,6 +7,7 @@
 #include <optix_types.h>
 #include <sutil/vec_math.h>
 
+#include "implicit_geometries.h"
 #include "mmc_optix_ray.h"
 #include "mmc_optix_launchparam.h"
 
@@ -21,6 +22,10 @@ constexpr float DOUBLE_SAFETY_DISTANCE = 0.0002f;
 // simulation configuration and medium optical properties
 extern "C" {
     __constant__ MMCParam gcfg;
+}
+
+__device__ __forceinline__ mcx::ImplicitCurve& getCurveFromID(int id) {                         
+    return ((mcx::ImplicitCurve*)gcfg.curveData)[id];
 }
 
 /**
@@ -121,10 +126,12 @@ __device__ __forceinline__ uint subToInd(const uint3 &idx3d) {
 /**
  * @brief Get the index of the voxel that encloses p
  */
+//TODO: check if it should be divided by dstep here or if dstep should be larger for small voxels
 __device__ __forceinline__ uint getVoxelIdx(const float3 &p) {
-    return subToInd(make_uint3(p.x > 0.0f ? __float2int_rd(min(p.x, gcfg.nmax.x) * gcfg.dstep) : 0,
-                              p.y > 0.0f ? __float2int_rd(min(p.y, gcfg.nmax.y) * gcfg.dstep) : 0,
-                              p.z > 0.0f ? __float2int_rd(min(p.z, gcfg.nmax.z) * gcfg.dstep) : 0));
+    // converts float 2 int with rounding down:
+    return subToInd(make_uint3(p.x > 0.0f ? __float2int_rd(min(p.x, gcfg.nmax.x) / gcfg.dstep) : 0,
+                              p.y > 0.0f ? __float2int_rd(min(p.y, gcfg.nmax.y) / gcfg.dstep) : 0,
+                              p.z > 0.0f ? __float2int_rd(min(p.z, gcfg.nmax.z) / gcfg.dstep) : 0));
 }
 
 /**
@@ -150,6 +157,13 @@ __device__ __forceinline__ void saveToBuffer(const uint &eid, const float &w) {
         }
     }
 }
+
+// gets a reference to a surface boundary struct via a primitive id in launch
+// params, which is a devicebuffer
+__device__ __forceinline__ PrimitiveSurfaceData& getSurfaceBoundary(int primIdx) {
+    return ((PrimitiveSurfaceData*)gcfg.surfaceBoundaries)[primIdx];
+}
+
 
 /**
  * @brief Accumulate output quantities to a 3D grid
@@ -294,19 +308,17 @@ extern "C" __global__ void __closesthit__ch() {
     // after hitting a boundary, update remaining scattering length
     r.slen -= lmove * currprop.mus;
 
-    // intersected triangle id
-    const int primid = optixGetPrimitiveIndex();
-
-    // get info of triangle, including face normal, neighbouring medium
-    const TriangleMeshSBTData &sbtData =
-        *(const TriangleMeshSBTData*)(optixGetSbtDataPointer());
-    float4 fnorm = sbtData.fnorm[primid];
+    // get info of GAS primitive, including face normal, neighbouring medium
+    // 
+    const PrimitiveSurfaceData&  surfaceData = getSurfaceBoundary(optixGetPrimitiveIndex());
+    float4 fnorm = surfaceData.fnorm;
 
     // assume transmission
     uint origmed = r.mediumid;
     OptixTraversableHandle origgashandle = r.gashandle;
     r.mediumid = __float_as_uint(fnorm.w);
-    r.gashandle = sbtData.nbgashandle[primid];
+
+    r.gashandle = surfaceData.nbgashandle;
 
     // update ray direction at mismatched boundary
     if (gcfg.isreflect && currprop.n != gcfg.medium[r.mediumid].n) {
@@ -336,6 +348,7 @@ extern "C" __global__ void __miss__ms() {
     mcx::Random rng = getRNG();
 
     // get medium properties
+    // TODO: replace this with IMMC version
     const Medium currprop = gcfg.medium[r.mediumid];
 
     // distance to the scattering event site
@@ -363,3 +376,143 @@ extern "C" __global__ void __miss__ms() {
     // update ray
     setRay(r);
 }
+
+// tests intersection of ray with a sphere and returns intersections as floats of distance from     start of ray
+// geometric solution taken from: scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-trace    r-rendering-simple-shapes/ray-sphere-intersection.html 
+__device__ __forceinline__ float2 get_sphere_intersections(const float3 center,
+        const float width, const float3 ray_origin, const float3 ray_dir){                                              
+
+    float3 L = center - ray_origin;
+    float tca = dot(L, ray_dir);
+
+    float d2 = dot(L, L) - tca*tca;
+    // result if no intersections, set both to negatives
+    if(d2 > width*width){
+        float2 hitTs = make_float2(-1,-1);
+        return hitTs;
+    }
+    // calculates both intersections
+    float thc = sqrt(width*width -d2);
+    float2 hitTs;
+    hitTs.x = tca-thc;
+    hitTs.y = tca+thc;
+    return hitTs;
+}
+
+// tests intersection of ray with an infinite cylinder (derived from parametric substitution)
+// from davidjcobb.github.io/articles/ray-cylinder-intersection
+// solve a quadratic equation of at^2+bt+c = 0 for t
+__device__ __forceinline__ float2 get_inf_cyl_intersections(const float3 vertex1, 
+        const float3 vertex2, const float width, const float3 ray_origin, 
+        const float3 ray_dir){
+    float3 R1 = ray_origin - vertex2;
+    float3 Cs = vertex1-vertex2;
+    float  Ch = length(Cs);
+    float3 Ca = Cs/Ch;
+
+    float Ca_dot_Rd = dot(Ca, ray_dir);
+    float Ca_dot_R1 = dot(Ca, R1);
+    float R1_dot_R1 = dot(R1, R1);
+
+    float a = 1 - (Ca_dot_Rd * Ca_dot_Rd);
+    float b = 2 * (dot(ray_dir, R1) - Ca_dot_Rd * Ca_dot_R1);
+    float c = R1_dot_R1 - Ca_dot_R1 * Ca_dot_R1 - (width * width);
+
+    float2 cyl_hits;
+    float discriminant = b*b-4.0f*a*c;
+    if(discriminant<0){
+        cyl_hits.x = -1;
+        cyl_hits.y = -1;
+        return cyl_hits;
+    }
+
+    cyl_hits.x = (-b-sqrt(discriminant))/(2*a);
+    cyl_hits.y = (-b+sqrt(discriminant))/(2*a);
+    return cyl_hits;
+}
+
+
+// intersection test for curve primitives
+extern "C" __global__ void __intersection__customlinearcurve(){
+
+    // 1. initialize variables for geometry
+    int primIdx = optixGetPrimitiveIndex();
+    unsigned int curveIdx;
+    
+    float width_offset = 0;
+    if (primIdx >= gcfg.num_inside_prims) {
+        curveIdx = primIdx - gcfg.num_inside_prims;
+        width_offset = gcfg.WIDTH_ADJ;
+    } else {
+        curveIdx = primIdx;
+    }
+
+    const mcx::ImplicitCurve& curve = getCurveFromID(curveIdx);
+    
+    // vector going from pt2 to pt1:
+    float3 lineseg_AB = curve.vertex1-curve.vertex2;
+    float width = curve.width + width_offset;
+    float t_min = optixGetRayTmin();
+    float t_max = optixGetRayTmax();
+    // get normalized ray direction
+    float3 ray_dir = normalize(optixGetWorldRayDirection());
+    float3 ray_origin = optixGetWorldRayOrigin();
+
+    // test for intersections with sphere 1:
+    float2 sphere_one_hits = get_sphere_intersections(curve.vertex1, width, ray_origin, ray_dir)    ;
+    
+    // get coordinates for intersections
+    float3 sphere_one_hit_one = ray_origin + ray_dir * sphere_one_hits.x;
+    float3 sphere_one_hit_two = ray_origin + ray_dir * sphere_one_hits.y;
+
+    // discard intersections on interior side of sphere 1:
+    // (discard if negative when taking dot product with vector AB)
+    if(dot(sphere_one_hit_one-curve.vertex1, lineseg_AB)<0){
+        sphere_one_hits.x = -1;
+    }
+    if(dot(sphere_one_hit_two-curve.vertex1, lineseg_AB)<0){
+        sphere_one_hits.y = -1;
+    }
+    optixReportIntersection(sphere_one_hits.x, 1);
+    optixReportIntersection(sphere_one_hits.y, 1);
+
+    // test for intersections with sphere 2:
+    float2 sphere_two_hits = get_sphere_intersections(curve.vertex2, width, ray_origin, ray_dir)    ;
+    // get coordinates for intersections
+    float3 sphere_two_hit_one = ray_origin + (ray_dir * sphere_two_hits.x);
+    float3 sphere_two_hit_two = ray_origin + (ray_dir * sphere_two_hits.y);
+
+    // discard intersections on interior side of sphere 2:
+    if(dot(curve.vertex2-sphere_two_hit_one, lineseg_AB)<0){
+        sphere_two_hits.x = -1;
+    }
+    if(dot(curve.vertex2-sphere_two_hit_two, lineseg_AB)<0){
+        sphere_two_hits.y = -1;
+    }
+    optixReportIntersection(sphere_two_hits.x, 2);
+    optixReportIntersection(sphere_two_hits.y, 2);
+
+    // test for intersections with infinite cylinder:
+    float2 cyl_hits = get_inf_cyl_intersections(curve.vertex1, curve.vertex2, width, ray_origin,     ray_dir);
+    
+    // discard intersections on exterior of cylinder:
+    float3 cyl_hit_one = ray_origin + ray_dir * cyl_hits.x;
+    float3 cyl_hit_two = ray_origin + ray_dir * cyl_hits.y;
+    if(dot(cyl_hit_one-curve.vertex1, lineseg_AB)>0 || 
+    dot(cyl_hit_one-curve.vertex2, lineseg_AB)<0){
+        cyl_hits.x = -1;
+    }
+
+    if(dot(cyl_hit_two-curve.vertex1, lineseg_AB)>0 || 
+    dot(cyl_hit_two-curve.vertex2, lineseg_AB)<0){
+        cyl_hits.y = -1;
+    }
+
+    optixReportIntersection(cyl_hits.x, 3);
+    optixReportIntersection(cyl_hits.y, 3);
+
+    return;
+
+}
+
+

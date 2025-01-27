@@ -2,7 +2,7 @@
 #include <cuda_runtime.h>
 #include "CUDABuffer.h"
 #include <optix.h>
-#include <optix_function_table_definition.h>
+//    #include <optix_function_table_definition.h>
 #include <optix_stubs.h>
 #include <stdio.h>
 #include <chrono>
@@ -29,9 +29,9 @@
 
 // this includes lots of optix features
 #ifndef NDEBUG
-INCTXT(mmcShaderPtx, mmcShaderPtxSize, "mmc_optix_core.ptx")
+INCTXT(mmcShaderPtx, mmcShaderPtxSize, "/built/mmc_optix_core.ptx")
 #else
-INCTXT(mmcShaderPtx, mmcShaderPtxSize, "mmc_optix_core.ptx");
+INCTXT(mmcShaderPtx, mmcShaderPtxSize, "/built/mmc_optix_core.ptx");
 #endif
 
 #define SPHERE_MATERIAL 2
@@ -83,7 +83,6 @@ std::vector<mcx::ImplicitCurve> mcconfig_to_capsules(const mcconfig* cfg){
 
     return curveVector;
 }
-
 
 // converts from c-style arrays to spheres
 std::vector<mcx::ImplicitSphere> mcconfig_to_spheres(const mcconfig* cfg){
@@ -904,9 +903,9 @@ bool checkStartInImplicit(tetmesh* mesh, mcconfig* cfg){
     return false;
 }
 
-MMCParam prepOptixIMMCLaunchParams(mcconfig* cfg, tetmesh* mesh, GPUInfo* gpu,
+MMCParam prepOptixIMMCLaunchParams(mcconfig* cfg, tetmesh* mesh, const unsigned int num_inside_prims, const OptixTraversableHandle startHandle,
                                     std::vector<PrimitiveSurfaceData> surfaceData, 
-                                    std::vector<ImplicitCurve> curveData){
+                                    std::vector<ImplicitCurve> curveData, float** outputHostBuffer, unsigned int* outputSize, osc::CUDABuffer* outputBuffer){
         MMCParam gcfg;
 
         // TODO: Implement front-end for MMC instead of temporarily
@@ -936,11 +935,9 @@ MMCParam prepOptixIMMCLaunchParams(mcconfig* cfg, tetmesh* mesh, GPUInfo* gpu,
         gcfg.outputtype = static_cast<int>(cfg->outputtype);
 
         // initializing variables for output of data
-        unsigned int outputSize = (gcfg.crop0.w << 1);
-        float* outputHostBuffer = (float*) calloc(outputSize, sizeof(float));    
-        //float outputHostBuffer[outputSize];
-        osc::CUDABuffer outputBuffer;
-        outputBuffer.alloc_and_upload(outputHostBuffer, outputSize);
+        *outputSize = (gcfg.crop0.w << 1);
+        *outputHostBuffer = (float*) calloc(*outputSize, sizeof(float));
+        outputBuffer->alloc_and_upload(*outputHostBuffer, *outputSize);
 
 	    // surfaceData is a vector of surface boundaries
 	    DeviceBuffer<PrimitiveSurfaceData> primitive_data = 
@@ -948,18 +945,12 @@ MMCParam prepOptixIMMCLaunchParams(mcconfig* cfg, tetmesh* mesh, GPUInfo* gpu,
 	    DeviceBuffer<ImplicitCurve> curves =
 	        DeviceBuffer<ImplicitCurve>(curveData.data(), curveData.size());
 
-        // uint3 dimensions of simulation
-	    //gcfg.dataSize = size; 
         // CUdeviceptr for vector of surface boundaries
         gcfg.surfaceBoundaries = primitive_data.handle(); 
         // CUdeviceptr for vector of capsules 
         gcfg.curveData = curves.handle(); 
         // CUdeviceptr for flattened 4D output array
-        gcfg.outputbuffer = outputBuffer.d_pointer();
-        // float for duration in milliseconds 
-        //gcfg.duration = duration; 
-        // int for number of time steps 
-        //gcfg.timeSteps = timeSteps;
+        gcfg.outputbuffer = outputBuffer->d_pointer();
         // float3 for starting position of ray
         gcfg.srcpos = make_float3(cfg->srcpos.x,
                                   cfg->srcpos.y,
@@ -970,10 +961,9 @@ MMCParam prepOptixIMMCLaunchParams(mcconfig* cfg, tetmesh* mesh, GPUInfo* gpu,
                                   cfg->srcdir.z); 
         
         // starting OptixTraversableHandle 
-        //TODO:gcfg.gashandle0 = startHandle;
-        // uint32_t index of the starting Medium
-	    //TODO:gcfg.mediumid0 = startMedium; 
-        // calculate medium ID
+        gcfg.gashandle0 = startHandle;
+       
+        // calculate starting medium 
         bool notStartingInImplicit = !checkStartInImplicit(mesh, cfg);
         gcfg.mediumid0 = notStartingInImplicit ? mesh->type[cfg->e0-1] : SPHERE_MATERIAL;
 
@@ -1001,8 +991,7 @@ MMCParam prepOptixIMMCLaunchParams(mcconfig* cfg, tetmesh* mesh, GPUInfo* gpu,
 	    unsigned int oddphoton = cfg->nphoton - threadphoton * launchWidth;
 
         // unsigned int describing number of GAS primitives for out-in tracing 
-        // TODO: calculate this
-        //gcfg.num_inside_prims = num_inside_prims;
+        gcfg.num_inside_prims = num_inside_prims;
         // float for marginal difference in radii for out-in 
         // vs in-out primitives 
         gcfg.WIDTH_ADJ = 1.0 / 10240.0;
@@ -1027,10 +1016,7 @@ MMCParam prepOptixIMMCLaunchParams(mcconfig* cfg, tetmesh* mesh, GPUInfo* gpu,
 // this function is run by the main and performs the mmc-optix simulation given
 // a mesh, voxel grid size for absorption counts, vector of media optical
 // properties, photon count etc.
-void McxContext::simulate(tetmesh* mesh,
-			  std::vector<Medium> media, uint32_t pcount,
-			  float duration, uint32_t timeSteps,
-			  float3 pos, float3 dir, mcconfig* cfg) {
+void McxContext::simulate(tetmesh* mesh, mcconfig* cfg) {
 
 	std::vector<PrimitiveSurfaceData> surfaceData;
 	std::vector<ImplicitCurve> curveData;
@@ -1042,16 +1028,15 @@ void McxContext::simulate(tetmesh* mesh,
     curveData = mcconfig_to_capsules(cfg);
     std::vector<mcx::ImplicitSphere> spheres = mcconfig_to_spheres(cfg);
 
-	bool startInSphere = insideSphere(pos, spheres);
-	bool startInCurve = insideCurve(pos, curveData);
+	bool startInSphere = insideSphere(make_float3(cfg->srcpos.x, cfg->srcpos.y, cfg->srcpos.z), spheres);
+	bool startInCurve = insideCurve(make_float3(cfg->srcpos.x, cfg->srcpos.y, cfg->srcpos.z), curveData);
 	// right now set to true if the start is inside either implicit geometry
 	bool startInImplicit = startInSphere || startInCurve;
 
 	std::cout << "Starting element is:" << cfg->e0 << std::endl;
 
 	unsigned int num_inside_prims;
-	const float WIDTH_ADJ = 1.0 / 10240.0;
-	// accelerationStructures variable isn't actually used anywhere,
+	const float WIDTH_ADJ = 1.0 / 10240.0;// Width adjustment to make outer spheres slightly larger than inner spheres
 	// function modifies almost everything by reference
 	    generateTetrahedralAccelerationStructures(
 		this->optixContext, mesh, surfaceData, curveData, handles,
@@ -1086,114 +1071,17 @@ void McxContext::simulate(tetmesh* mesh,
 // TODO: get rid of thjis temp singlethreading:
 //        launchWidth = 1;
 	// set number of threads and photons per thread:
-	unsigned int threadphoton = pcount / launchWidth;	
-	unsigned int oddphoton = pcount - threadphoton * launchWidth;
+	unsigned int threadphoton = cfg->nphoton / launchWidth;	
+	unsigned int oddphoton = cfg->nphoton - threadphoton * launchWidth;
 
 	printf("\n THE NUMBER OF INSIDE PRIMS BEFORE SENDING TO GPU: %d", num_inside_prims);
-	// prepare optix pipeline parameters
-	MMCParam gcfg;
 
-        // TODO: Implement front-end for MMC instead of temporarily
-        // hardcoding optix-MMC variables
-        gcfg.tstart = 0;
-        gcfg.tend = 5e-9;
-        gcfg.Rtstep = 5e-10;
-
-        gcfg.maxgate = 10; // this is the last time gate 
-
-
-        int totalthread = launchWidth;
-        //uint4 hseed[totalthread];
-        uint4* hseed = (uint4 *)calloc(totalthread, sizeof(uint4));
-        for (int i=0; i<totalthread; ++i){
-            hseed[i] = make_uint4(rand(), rand(), rand(), rand());
-        }
-
-        // prepare seed buffer
-        osc::CUDABuffer seedBuffer;
-        seedBuffer.alloc_and_upload(hseed, totalthread);
-        gcfg.seedbuffer = seedBuffer.d_pointer(); 
-
-        // prepare dual mesh parameters
-        // TODO: make this into a function for IMMC with Dual-grid boundaries increased for
-        // capsules/spheres outside of mesh
-        gcfg.dstep = 1; // distance step for output is currently hardcoded to 0.01mm
-        gcfg.nmin = make_float3(VERY_BIG, VERY_BIG, VERY_BIG);
-        gcfg.nmax = make_float3(-VERY_BIG, -VERY_BIG, -VERY_BIG);
-
-        for (int i = 0; i<mesh->nn; i++){
-            gcfg.nmin.x = MIN(mesh->node[i].x, gcfg.nmin.x);
-            gcfg.nmin.y = MIN(mesh->node[i].y, gcfg.nmin.y);
-            gcfg.nmin.z = MIN(mesh->node[i].z, gcfg.nmin.z);
-            gcfg.nmax.x = MAX(mesh->node[i].x, gcfg.nmax.x);
-            gcfg.nmax.y = MAX(mesh->node[i].y, gcfg.nmax.y);
-            gcfg.nmax.z = MAX(mesh->node[i].z, gcfg.nmax.z); 
-        }
-
-        gcfg.nmin.x -= EPS;
-        gcfg.nmin.y -= EPS;
-        gcfg.nmin.z -= EPS;
-        gcfg.nmax.x -= EPS;
-        gcfg.nmax.y -= EPS;
-        gcfg.nmax.z -= EPS;
-
-        int dim_x = (int)((gcfg.nmax.x - gcfg.nmin.x) / gcfg.dstep);
-        int dim_y = (int)((gcfg.nmax.y - gcfg.nmin.y) / gcfg.dstep);
-        int dim_z = (int)((gcfg.nmax.z - gcfg.nmin.z) / gcfg.dstep);
-
-        gcfg.crop0.x = dim_x;
-        gcfg.crop0.y = dim_x*dim_y;
-        gcfg.crop0.z = dim_x*dim_y*dim_z;
-        // TODO: did not implement the cfg->nbuffer feature that is used to prevent racing?
-        gcfg.crop0.w = gcfg.crop0.z * gcfg.maxgate;
-        
-        gcfg.isreflect = 0; // turn reflection settings off for now
-        gcfg.outputtype = otFluence;//otEnergy;
-
-
-	    // initializing variables for output of data
-        unsigned int outputSize = (gcfg.crop0.w << 1);
-        float* outputHostBuffer = (float*) calloc(outputSize, sizeof(float));    
-        //float outputHostBuffer[outputSize];
-        osc::CUDABuffer outputBuffer;
-        outputBuffer.alloc_and_upload(outputHostBuffer, outputSize);
-
-        // uint3 dimensions of simulation
-	    //gcfg.dataSize = size; 
-        // CUdeviceptr for vector of surface boundaries
-        gcfg.surfaceBoundaries = primitive_data.handle(); 
-        // CUdeviceptr for vector of capsules 
-        gcfg.curveData = curves.handle(); 
-        // CUdeviceptr for flattened 4D output array
-        gcfg.outputbuffer = outputBuffer.d_pointer();
-        // float for duration in milliseconds 
-        gcfg.duration = duration; 
-        // int for number of time steps 
-        gcfg.timeSteps = timeSteps;
-        // float3 for starting position of ray
-        gcfg.srcpos = pos; 
-        // float3 for vector of starting ray direction 
-        gcfg.srcdir = dir; 
-        // copy from vector into C style array
-        // of Medium structs in order for simulation
-     
-        for (size_t i = 0; i < media.size(); ++i) {
-             gcfg.medium[i] = media[i]; // Copy each element
-        } 
-        // starting OptixTraversableHandle 
-        gcfg.gashandle0 = startHandle;
-        // uint32_t index of the starting Medium
-	    gcfg.mediumid0 = startMedium; 
-        // unsigned int describing number of GAS primitives for out-in tracing 
-        gcfg.num_inside_prims = num_inside_prims;
-        // float for marginal difference in radii for out-in 
-        // vs in-out primitives 
-        gcfg.WIDTH_ADJ = WIDTH_ADJ;
-        // unsigned int for number of photons per thread
-        gcfg.threadphoton = threadphoton; 
-        // unsigned int for remainder after dividing between threads 
-        gcfg.oddphoton = oddphoton;
-
+    float* outputHostBuffer;
+    unsigned int outputSize;
+    osc::CUDABuffer outputBuffer; 
+    // prepare optix pipeline parameters
+	MMCParam gcfg = prepOptixIMMCLaunchParams(cfg, mesh, num_inside_prims, startHandle, surfaceData, curveData, &outputHostBuffer, &outputSize, &outputBuffer);
+	    
 	DeviceBuffer<MMCParam> paraBuffer(gcfg);
 
 	std::cout << "Beginning simulation." << std::endl;
@@ -1213,7 +1101,7 @@ void McxContext::simulate(tetmesh* mesh,
 
     // download from GPU the outputted data
 	outputBuffer.download(outputHostBuffer, outputSize);
-    printf("\nsim completed successfully, photons per ms was %f \n", pcount/timer.elapse());
+    printf("\nsim completed successfully, photons per ms was %f \n", cfg->nphoton/timer.elapse());
     printf("\nTotal kernel time: %f \n", timer.elapse()); 
     printf("\nbuffer downloaded successfully");
     double* TEMPweight;
@@ -1247,7 +1135,6 @@ void McxContext::simulate(tetmesh* mesh,
     fp = fopen("optix.bin", "wb");
     fwrite(TEMPweight, sizeof(double), datalen*gcfg.maxgate, fp);
     fclose(fp);
-
     }
 }
 
