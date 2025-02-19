@@ -106,14 +106,14 @@ std::vector<mcx::ImplicitSphere> mcconfig_to_spheres(const mcconfig* cfg){
 /**
  * @brief extract surface mesh for each medium
  */
-void prepareSurfMesh(tetmesh *tmesh, surfmesh *smesh) {
+void prepareSurfMeshArray(tetmesh *tmesh, surfmesh *smesh, const mcconfig *cfg) {
 
     const int ifaceorder[] = {3, 0, 2, 1};
     const int out[4][3] = {{0, 3, 1}, {3, 2, 1}, {0, 2, 3}, {0, 1, 2}};
     int *fnb = (int*)calloc(tmesh->ne * tmesh->elemlen, sizeof(int));
     memcpy(fnb, tmesh->facenb, (tmesh->ne * tmesh->elemlen) * sizeof(int));
 
-    float3 v0, v1, v2, vec01, vec02, vnorm;
+    float3 v0, v1, v2, vec01, vec02, vnorm; 
     for (int i = 0; i < tmesh->ne; ++i) {
         // iterate over each tetrahedra
         unsigned int currmedid = tmesh->type[i];
@@ -158,6 +158,23 @@ void prepareSurfMesh(tetmesh *tmesh, surfmesh *smesh) {
                     }
                 }
             }                                                                                                                                                                                                    
+        }
+    }
+
+    // iterate over each surface mesh
+    for(int j=0; j<=tmesh->prop; ++j){ 
+        // Add spheres and capsules to smesh from cfg
+        for (int i = 0; i<cfg->nspheres; i++){
+            ImplicitSphere sphere = {make_float3(cfg->spheres[i].x, cfg->spheres[i].y, cfg->spheres[i].z), cfg->spheres[i].w};       
+            smesh[j].spheres.push_back(sphere); 
+        }
+
+        // Add capsules to smesh from cfg
+        for (int i = 0; i<cfg->ncapsules; i=i+2){
+            ImplicitCurve capsule = {make_float3(cfg->capsulecenters[i].x, cfg->capsulecenters[i].y, cfg->capsulecenters[i].z), 
+                                       make_float3(cfg->capsulecenters[i+1].x, cfg->capsulecenters[i+1].y, cfg->capsulecenters[i+1].z), 
+                                       cfg->capsulewidths[i/2]};
+            smesh[j].curves.push_back(capsule);
         }
     }
 }
@@ -320,7 +337,7 @@ static DeviceByteBuffer createCurveAccelStructure(
 
 	std::vector<OptixAabb> aabb = std::vector<OptixAabb>();
 	// prepare axis aligned bounding boxes
-	for (int i = 0; i < vertexVector.size(); i += 2) {
+	for (unsigned int i = 0; i < vertexVector.size(); i += 2) {
 		// create one per curve primitive,
 		//  figure out the maximum/min vertex in each direction
 		//  and then calculate the maximum height/width/depth
@@ -538,7 +555,7 @@ static DeviceByteBuffer createInstanceAccelerationStructure(
 static OptixTraversableHandle generateManifoldWithLinearCurves(
     OptixDeviceContext ctx, DeviceBuffer<float3>& triangleVertexBuffer,
     int& primitiveCount, std::vector<DeviceByteBuffer>& result,
-    surfmesh* smesh, float curveWidthAdjustment,
+    surfmesh smesh, float curveWidthAdjustment,
     float sphereRadiusAdjustment, const mcconfig* cfg) {
 
 	std::vector<uint32_t> sbt = std::vector<uint32_t>();
@@ -553,7 +570,7 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 	// tetrahedral manifold
 	unsigned int curvecount = 0;
 	unsigned int vertices_per_curve = 2;
-	for (ImplicitCurve curve : smesh->curves) {
+	for (ImplicitCurve curve : smesh.curves) {
 		curveVertices.push_back(curve.vertex1);
 		curveVertices.push_back(curve.vertex2);
 		curveWidths.push_back(curve.width - curveWidthAdjustment);
@@ -575,11 +592,11 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 
 	OptixTraversableHandle curvesHandle;
 
-	if (smesh->curves.size() > 0) {
+	if (smesh.curves.size() > 0) {
 		result.push_back(createCurveAccelStructure(
 		    ctx, curvesHandle, primitiveCount, curveVertices,
 		    curveWidths, curveIndexBuffer, sbtBuffer));
-		primitiveCount += smesh->curves.size();
+		primitiveCount += smesh.curves.size();
 	}
 
 	// create the sphere acceleration structures
@@ -588,7 +605,7 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 	sbt = std::vector<uint32_t>();
 
 	// Sphere coordinates and radii is inside of tetrahedral smesh 
-	for (ImplicitSphere sphere : smesh->spheres) {
+	for (ImplicitSphere sphere : smesh.spheres) {
 		sphereCenters.push_back(sphere.position);
 		sphereRadii.push_back(sphere.radius - sphereRadiusAdjustment);
 		sbt.push_back(0);
@@ -602,18 +619,18 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 
 	OptixTraversableHandle spheresHandle;
 
-	if (smesh->spheres.size() > 0) {
+	if (smesh.spheres.size() > 0) {
 		// this creates the acceleration structures for spheres
 		result.push_back(createSphereAccelerationStructure(
 		    ctx, spheresHandle, primitiveCount, centerBuffer,
 		    radiiBuffer, sbtBuffer));
-		primitiveCount += smesh->spheres.size();
+		primitiveCount += smesh.spheres.size();
 	}
 
 	// create the mesh acceleration structures
 	std::vector<uint3> indices; 
 
-	for (uint3 triangle_face : smesh->face) {
+	for (uint3 triangle_face : smesh.face) {
 		indices.push_back(triangle_face);
 		sbt.push_back(0);
 	}
@@ -626,15 +643,15 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 	result.push_back(createAccelerationStructure(
 	    ctx, handle, primitiveCount, triangleVertexBuffer, indexBuffer,
 	    sbtBuffer));
-	primitiveCount += smesh->face.size();
+	primitiveCount += smesh.face.size();
 
 	// combine the handles
 	std::vector<OptixTraversableHandle> combinedHandles =
 	    std::vector<OptixTraversableHandle>();
-	if (smesh->curves.size() > 0) {
+	if (smesh.curves.size() > 0) {
 		combinedHandles.push_back(curvesHandle);
 	}
-	if (smesh->spheres.size() > 0){
+	if (smesh.spheres.size() > 0){
 		combinedHandles.push_back(spheresHandle);
 	}
 	combinedHandles.push_back(handle);
@@ -657,13 +674,11 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 	
     std::cout << "Creating single-material triangle surface-meshes." << std::endl;
 	
-    //std::vector<uint32_t> tetrahedron_to_manifold;
-	//std::vector<TetrahedralManifold> manifolds =
-	//    mesh.buildManifold(tetrahedron_to_manifold);
-
     // create a c-style array of surface meshes
     surfmesh *smesh = (surfmesh*)calloc((mesh->prop + 1), sizeof(surfmesh));
-    prepareSurfMesh(mesh, smesh);                                                                                                                                                                                
+    prepareSurfMeshArray(mesh, smesh, cfg);
+
+    printf("Num spheres created: %d Num curves created: %d\n", smesh->spheres.size(), smesh->curves.size());    
 	std::vector<DeviceByteBuffer> result = std::vector<DeviceByteBuffer>();
 	handles = std::vector<OptixTraversableHandle>();
 	std::vector<OptixTraversableHandle> insideSphereHandles =
@@ -681,7 +696,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 	// outside spheres
 	for (int i = 0; i <= mesh->prop; ++i) {
 		 handles.push_back(generateManifoldWithLinearCurves(
-		    ctx, vertexBuffer, primitiveCount, result, smesh + i, 0.0,
+		    ctx, vertexBuffer, primitiveCount, result, smesh[i], 0.0,
 		    0.0, cfg));
 	}
 
@@ -691,7 +706,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 	for (int i = 0; i <= mesh->prop; ++i) {
 		// constant to determine how much wider outside-inside intersection tracking primitives should be
 		insideSphereHandles.push_back(generateManifoldWithLinearCurves(
-		    ctx, vertexBuffer, primitiveCount, result, smesh + i,
+		    ctx, vertexBuffer, primitiveCount, result, smesh[i],
 		    WIDTH_ADJ, WIDTH_ADJ, cfg));
 	}
 
@@ -723,19 +738,19 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 		}
 
 #ifndef NDEBUG
-			printf("\n number of outside-curves sent to device: %d", manifolds[i].curves.size());	
+			printf("\n number of outside-curves sent to device: %d", smesh[i].curves.size());	
 #endif
 
 		// add all spheres to the surface boundaries
 		for (ImplicitSphere s : smesh[i].spheres) {
 			float4 facenorm_and_mediumid = make_float4(s.position.x, s.position.y, s.position.z,
-                       *(float*)i); 
+                       storeuintAsFloat(1)); 
             surfaceData.push_back(PrimitiveSurfaceData{
                 facenorm_and_mediumid, insideSphereHandles[i]});
 		}
 
 #ifndef NDEBUG
-			printf("\n number of outside-spheres sent to device: %d", manifolds[i].spheres.size());	
+			printf("\n number of outside-spheres sent to device: %d", smesh[i].spheres.size());	
 #endif
 
 		// assigns all surface mesh triangles a material
@@ -746,7 +761,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 				surfaceData.push_back(PrimitiveSurfaceData{
                     facenorm_and_mediumid,
 				    handles[smesh[i].nbtype[j]]});
-                printf("\nTriangle Boundary Material ID is: %f",  *(float*)&smesh[i].nbtype[j]);
+                //printf("\nTriangle Boundary Material ID is: %f",  *(float*)&smesh[i].nbtype[j]);
 		}
 #ifndef NDEBUG
 			printf("\n number of outside-triangles sent to device: %d", smesh[i].face.size());	
@@ -755,17 +770,17 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 	}
 
 	for (int i = 0; i < mesh->prop; i++) {
-		for (ImplicitCurve c : smesh[i].curves) {
-			float4 facenorm_and_mediumid = make_float4(0,0,0,
-                    *(float*)i);
+		for (auto& _ : smesh[i].curves) {// iterate for each curve
+            (void) _; // suppress compiler warning about unused variable in range based loop	
+            float4 facenorm_and_mediumid = make_float4(0,0,0,
+                    storeuintAsFloat(1));
             surfaceData.push_back(
 			    PrimitiveSurfaceData{
                   facenorm_and_mediumid,
 			      handles[i]});
-
 		}
 #ifndef NDEBUG
-			printf("\n number of inside-curves sent to device: %d", manifolds[i].curves.size());	
+			printf("\n number of inside-curves sent to device: %d", smesh[i].curves.size());	
 #endif
 		for (ImplicitSphere s : smesh[i].spheres) {
 			float4 facenorm_and_mediumid = make_float4(
@@ -777,7 +792,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 		}
 
 #ifndef NDEBUG
-			printf("\n number of inside-spheres sent to device: %d", manifolds[i].spheres.size());	
+			printf("\n number of inside-spheres sent to device: %d", smesh[i].spheres.size());	
 #endif
 
 		for (size_t j = 0; j < smesh[i].norm.size(); ++j) {
@@ -788,7 +803,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 				    insideSphereHandles[smesh[i].nbtype[j]]});
 		}
 	#ifndef NDEBUG
-			printf("\n number of inside-triangles sent to device: %d", manifolds[i].triangles.size());	
+			printf("\n number of inside-triangles sent to device: %d", smesh[i].norm.size());	
 	#endif
 	}
 
@@ -801,7 +816,6 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 		? insideSphereHandles[startTetMedium]
 		: handles[startTetMedium];
 
-    printf("\n Starting Material is: %d", startTetMedium);
 	return result;
 }
 
@@ -866,7 +880,7 @@ McxContext::McxContext() {
             throw std::runtime_error("Hitgroup data count was not the same as pipeline hitgroup count");
         }
 
-        for (int i = 0; i < h.size(); i++)
+        for (unsigned int i = 0; i < h.size(); i++)
         {
             grecs.push_back(SbtRecord<void*>(h[i]));
             OPTIX_CHECK(optixSbtRecordPackHeader(
@@ -899,6 +913,7 @@ McxContext::McxContext(McxContext&& src) {
 }
 
 // calculates if the ray is starting in an implicit structure
+// TODO: implement this
 bool checkStartInImplicit(tetmesh* mesh, mcconfig* cfg){
     return false;
 }
@@ -966,6 +981,7 @@ MMCParam prepOptixIMMCLaunchParams(mcconfig* cfg, tetmesh* mesh, const unsigned 
         // calculate starting medium 
         bool notStartingInImplicit = !checkStartInImplicit(mesh, cfg);
         gcfg.mediumid0 = notStartingInImplicit ? mesh->type[cfg->e0-1] : SPHERE_MATERIAL;
+        printf("Starting Medium is: %d\n", gcfg.mediumid0);
 
         // Media
         for (int i = 0; i <= mesh->prop; ++i) {
@@ -1011,6 +1027,7 @@ MMCParam prepOptixIMMCLaunchParams(mcconfig* cfg, tetmesh* mesh, const unsigned 
         osc::CUDABuffer seedBuffer;
         seedBuffer.alloc_and_upload(hseed, totalthread);
         gcfg.seedbuffer = seedBuffer.d_pointer(); 
+        return gcfg;
 }
 
 // this function is run by the main and performs the mmc-optix simulation given
@@ -1066,13 +1083,6 @@ void McxContext::simulate(tetmesh* mesh, mcconfig* cfg) {
 
     	// Calculate the total number of threads
     	unsigned int launchWidth = (numSMs-1) * maxThreadsPerSM;
-
-
-// TODO: get rid of thjis temp singlethreading:
-//        launchWidth = 1;
-	// set number of threads and photons per thread:
-	unsigned int threadphoton = cfg->nphoton / launchWidth;	
-	unsigned int oddphoton = cfg->nphoton - threadphoton * launchWidth;
 
 	printf("\n THE NUMBER OF INSIDE PRIMS BEFORE SENDING TO GPU: %d", num_inside_prims);
 

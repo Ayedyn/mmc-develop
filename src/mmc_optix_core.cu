@@ -512,7 +512,6 @@ extern "C" __global__ void __intersection__customlinearcurve(){
     optixReportIntersection(cyl_hits.y, 3);
 
     return;
-
 }
 
 

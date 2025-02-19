@@ -286,8 +286,10 @@ typedef struct MMC_config {
 
     #ifdef OPTIX_IMMC 
     float4* spheres;       /**< optix implicit spheres x, y, z (of center), radius */
+    unsigned int nspheres; 
     float3* capsulecenters;/**< optix centers for capsule endpoints (two per capsule), x, y, z */
     float* capsulewidths;  /**< optix widths for each capsule */
+    unsigned int ncapsules; 
     #endif
 
 } mcconfig;

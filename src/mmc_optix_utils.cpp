@@ -686,7 +686,7 @@ void buildSBT(tetmesh* mesh, surfmesh* smesh, OptixParams* optixcfg) {
         for (size_t j = 0; j < smesh[i].norm.size(); ++j) {
             fnorm.push_back(make_float4(smesh[i].norm[j].x, smesh[i].norm[j].y,
                 smesh[i].norm[j].z, *(float*)&smesh[i].nbtype[j]));
-            printf("The smesh number %d's %dth nbtype is: %d\n", i, j, smesh[i].nbtype[j]);
+            printf("The smesh number %d's %luth nbtype is: %d\n", i, j, smesh[i].nbtype[j]);
             nbgashandle.push_back(optixcfg->gashandles[smesh[i].nbtype[j]]);
         }
     }

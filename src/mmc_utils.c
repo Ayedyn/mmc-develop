@@ -335,6 +335,12 @@ void mcx_initcfg(mcconfig* cfg) {
 #else
     cfg->parentid = mpStandalone;
 #endif
+#ifdef OPTIX_IMMC
+    cfg->spheres = NULL;
+    cfg->capsulecenters = NULL;
+    cfg->capsulewidths = NULL;
+#endif
+
 }
 
 /**

@@ -32,10 +32,10 @@ void mmc_run_optix(mcconfig* cfg, tetmesh* mesh, raytracer* tracer,
 #endif
 
 #ifdef OPTIX_IMMC
-        size_t num_spheres = sizeof(cfg->spheres) / sizeof(cfg->spheres[0]);
-        size_t num_capsule_centers = sizeof(cfg->capsulecenters) / sizeof(cfg->capsulecenters[0]);
-        const bool has_implicits = num_spheres>0 || num_capsule_centers>1; 
+MMC_FPRINTF(cfg->flog, "\nOptix-IMMC num_spheres=%d", cfg->nspheres);
+        const bool has_implicits = cfg->nspheres>0 || cfg->ncapsules>1; 
         if(has_implicits){ // at least one implicit sphere or capsule is simulated
+            MMC_FPRINTF(cfg->flog, "\nRunning Optix-IMMC");             
             mcx::McxContext ctx = mcx::McxContext();
             ctx.simulate(mesh, cfg); 
         }

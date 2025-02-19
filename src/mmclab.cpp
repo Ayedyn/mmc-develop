@@ -617,7 +617,83 @@ void mmc_set_field(const mxArray* root, const mxArray* item, int idx, mcconfig* 
 
         cfg->implicit = 2;
         printf("mmc.faceroi=[%d,%d];\n", mesh->ne, 4);
-    } else if (strcmp(name, "elemprop") == 0) {
+    } 
+    #ifdef OPTIX_IMMC 
+    else if (strcmp(name, "spheres") == 0) { // input for spheres in optix-IMMC
+        arraydim = mxGetDimensions(item);
+
+        if (arraydim[0] > 0 && arraydim[1] != 4) {
+            MEXERROR("the 'spheres' field must have 4 columns (x,y,z,radius)");
+        }
+
+        double* val = mxGetPr(item);
+        cfg->nspheres = arraydim[0];
+
+        if (cfg->spheres) {
+            free(cfg->spheres);
+        }
+
+        cfg->spheres = (float4*)malloc(cfg->nspheres * sizeof(float4));
+
+        for (unsigned int i = 0; i < cfg->nspheres; i++) {
+            cfg->spheres[i].x = val[0 * cfg->nspheres + i];
+            cfg->spheres[i].y = val[1 * cfg->nspheres + i];
+            cfg->spheres[i].z = val[2 * cfg->nspheres + i];
+            cfg->spheres[i].w = val[3 * cfg->nspheres + i];
+        }
+
+        printf("Number of OptiX-IMMC spheres=%d;\n", cfg->nspheres);
+        printf("\nOptix spheres is: %f, %f, %f, %f", cfg->spheres[0].x, cfg->spheres[0].y, cfg->spheres[0].z, cfg->spheres[0].w);
+    
+    } 
+    else if (strcmp(name, "capsulecenters") == 0) { // input for capsulecenters in optix-IMMC
+        arraydim = mxGetDimensions(item);
+
+        if (arraydim[0] > 0 && arraydim[1] != 3) {
+            MEXERROR("the 'capsulecenters' field must have 3 columns (x,y,z)");
+        }
+
+        double* val = mxGetPr(item);
+        int ncapsulecenters= arraydim[0];
+
+        if (cfg->capsulecenters) {
+            free(cfg->capsulecenters);
+        }
+
+        cfg->capsulecenters= (float3*)malloc(ncapsulecenters* sizeof(float3));
+
+        for (j = 0; j < 3; j++)
+            for (i = 0; i < ncapsulecenters; i++) {
+                ((float*)(&cfg->capsulecenters[i]))[j] = val[j * ncapsulecenters + i];
+            }
+
+        printf("Number of OptiX-IMMC capsulecenters=%d;\n", ncapsulecenters);
+    } 
+    else if (strcmp(name, "capsulewidths") == 0) { // input for capsulewidths in optix-IMMC
+        arraydim = mxGetDimensions(item);
+
+        if (arraydim[0] > 0 && arraydim[1] != 1) {
+            MEXERROR("the 'capsulewidths' field must have 1 column");
+        }
+
+        double* val = mxGetPr(item);
+        int ncapsulewidths= arraydim[0];
+
+        if (cfg->capsulewidths) {
+            free(cfg->capsulewidths);
+        }
+
+        cfg->capsulewidths= (float*)malloc(ncapsulewidths* sizeof(float));
+
+        for (i = 0; i < ncapsulewidths; i++) {
+             cfg->capsulewidths[i] = (float) val[i];
+        }
+
+        printf("Number of OptiX-IMMC capsulewidths=%d;\n", ncapsulewidths);
+       cfg->ncapsules = ncapsulewidths;  
+    }   
+    #endif 
+    else if (strcmp(name, "elemprop") == 0) {
         arraydim = mxGetDimensions(item);
 
         if (MAX(arraydim[0], arraydim[1]) == 0) {
