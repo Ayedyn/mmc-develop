@@ -61,15 +61,13 @@ std::vector<mcx::ImplicitCurve> mcconfig_to_capsules(const mcconfig* cfg){
     float3* capsuleArray = cfg->capsulecenters;
     float* capsuleWidths = cfg->capsulewidths;
     
-    size_t arraySize = sizeof(capsuleArray) / sizeof(capsuleArray[0]);
-    if(arraySize%2 != 0){
-        throw("Error: Capsule vertices count is uneven, two vertices needed per capsule.\n");
-    }
-
+    size_t arraySize = cfg->ncapsules;
+    printf("Arraysize is: %d\n", arraySize);
+     
     std::vector<mcx::ImplicitCurve> curveVector;
     curveVector.reserve(arraySize); 
     
-    for (size_t i = 0; i < arraySize; i=i+2) {
+    for (size_t i = 0; i < arraySize*2; i=i+2) {
         const float3& f1 = capsuleArray[i];
         const float3& f2 = capsuleArray[i+1];
         const float& w = capsuleWidths[i/2];
@@ -694,7 +692,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 	int primitiveCount = 0;
 	// two separate vectors of traversable handles are created, one for
 	// outside spheres
-	for (int i = 0; i <= mesh->prop; ++i) {
+	for (int i = 0; i < mesh->prop; ++i) {
 		 handles.push_back(generateManifoldWithLinearCurves(
 		    ctx, vertexBuffer, primitiveCount, result, smesh[i], 0.0,
 		    0.0, cfg));
@@ -703,7 +701,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 	printf("\nThe number of inside primitives is: %d", primitiveCount);
 	num_inside_prims = primitiveCount;
 	// one for inside spheres
-	for (int i = 0; i <= mesh->prop; ++i) {
+	for (int i = 0; i < mesh->prop; ++i) {
 		// constant to determine how much wider outside-inside intersection tracking primitives should be
 		insideSphereHandles.push_back(generateManifoldWithLinearCurves(
 		    ctx, vertexBuffer, primitiveCount, result, smesh[i],
@@ -722,9 +720,6 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 	// outside implicits
 	surfaceData = std::vector<PrimitiveSurfaceData>();
 
-	// record curve info to pass to the device
-	curveData = std::vector<ImplicitCurve>();
-
 	std::cout << "Loading surface data." << std::endl;
 
 	// loops through all different surface meshes 
@@ -734,7 +729,6 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 		    float4 facenorm_and_mediumid = make_float4(0,0,0, storeuintAsFloat(SPHERE_MATERIAL));	
             surfaceData.push_back(PrimitiveSurfaceData{
 			    facenorm_and_mediumid, insideSphereHandles[i]});
-			curveData.push_back(s);
 		}
 
 #ifndef NDEBUG
@@ -960,6 +954,10 @@ MMCParam prepOptixIMMCLaunchParams(mcconfig* cfg, tetmesh* mesh, const unsigned 
 	    DeviceBuffer<ImplicitCurve> curves =
 	        DeviceBuffer<ImplicitCurve>(curveData.data(), curveData.size());
 
+        for(ImplicitCurve curve : curveData){
+            printf("Curvedata includes a curve with vertex1: %f, %f, %f, vertex2: %f, %f, %f, width: %f\n", curve.vertex1.x, curve.vertex1.y, curve.vertex1.z, curve.vertex2.x, curve.vertex2.y, curve.vertex2.z, curve.width);
+        }
+
         // CUdeviceptr for vector of surface boundaries
         gcfg.surfaceBoundaries = primitive_data.handle(); 
         // CUdeviceptr for vector of capsules 
@@ -1043,6 +1041,8 @@ void McxContext::simulate(tetmesh* mesh, mcconfig* cfg) {
 	uint32_t startMedium;
 
     curveData = mcconfig_to_capsules(cfg);
+    printf("number of curve part1 = %d\n", curveData.size());
+
     std::vector<mcx::ImplicitSphere> spheres = mcconfig_to_spheres(cfg);
 
 	bool startInSphere = insideSphere(make_float3(cfg->srcpos.x, cfg->srcpos.y, cfg->srcpos.z), spheres);
@@ -1058,6 +1058,8 @@ void McxContext::simulate(tetmesh* mesh, mcconfig* cfg) {
 	    generateTetrahedralAccelerationStructures(
 		this->optixContext, mesh, surfaceData, curveData, handles,
 		startMedium, startHandle, startInImplicit, num_inside_prims, WIDTH_ADJ, cfg);
+
+printf("number of curve part2 = %d\n", curveData.size());
 
 // print surface data for debugging
 #ifndef NDEBUG
@@ -1085,7 +1087,7 @@ void McxContext::simulate(tetmesh* mesh, mcconfig* cfg) {
     	unsigned int launchWidth = (numSMs-1) * maxThreadsPerSM;
 
 	printf("\n THE NUMBER OF INSIDE PRIMS BEFORE SENDING TO GPU: %d", num_inside_prims);
-
+printf("number of curve part3 = %d\n", curveData.size());
     float* outputHostBuffer;
     unsigned int outputSize;
     osc::CUDABuffer outputBuffer; 

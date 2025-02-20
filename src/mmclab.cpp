@@ -656,6 +656,10 @@ void mmc_set_field(const mxArray* root, const mxArray* item, int idx, mcconfig* 
         double* val = mxGetPr(item);
         int ncapsulecenters= arraydim[0];
 
+        if (ncapsulecenters%2 != 0){
+            throw("Error: Capsule vertices count is uneven, two vertices needed per capsule.\n");
+        }
+
         if (cfg->capsulecenters) {
             free(cfg->capsulecenters);
         }
@@ -668,6 +672,7 @@ void mmc_set_field(const mxArray* root, const mxArray* item, int idx, mcconfig* 
             }
 
         printf("Number of OptiX-IMMC capsulecenters=%d;\n", ncapsulecenters);
+        printf("\nOptix capsulecenters is: %f, %f, %f, %f, %f, %f\n", cfg->capsulecenters[0].x, cfg->capsulecenters[0].y, cfg->capsulecenters[0].z, cfg->capsulecenters[1].x, cfg->capsulecenters[1].y, cfg->capsulecenters[1].z); 
     } 
     else if (strcmp(name, "capsulewidths") == 0) { // input for capsulewidths in optix-IMMC
         arraydim = mxGetDimensions(item);
@@ -690,7 +695,8 @@ void mmc_set_field(const mxArray* root, const mxArray* item, int idx, mcconfig* 
         }
 
         printf("Number of OptiX-IMMC capsulewidths=%d;\n", ncapsulewidths);
-       cfg->ncapsules = ncapsulewidths;  
+       cfg->ncapsules = ncapsulewidths;
+        printf("\nOptix capsulewidths is: %f\n", cfg->capsulewidths[0]); 
     }   
     #endif 
     else if (strcmp(name, "elemprop") == 0) {

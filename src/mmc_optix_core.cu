@@ -281,6 +281,10 @@ extern "C" __global__ void __raygen__rg() {
  * @brief when a photon hits a triangle
  */
 extern "C" __global__ void __closesthit__ch() {
+    // Report hit type for debugging
+    unsigned int hittype = optixGetHitKind();
+    unsigned int primitivetype = optixGetPrimitiveType();
+    
     // get photon and ray information from payload
     optixray r = getRay();
 
@@ -437,6 +441,8 @@ extern "C" __global__ void __intersection__customlinearcurve(){
 
     // 1. initialize variables for geometry
     int primIdx = optixGetPrimitiveIndex();
+    //printf("Testing capsule intersection with primitive id: %d, numinsideprims: %d\n", primIdx, gcfg.num_inside_prims); 
+    
     unsigned int curveIdx;
     
     float width_offset = 0;
@@ -444,16 +450,17 @@ extern "C" __global__ void __intersection__customlinearcurve(){
         curveIdx = primIdx - gcfg.num_inside_prims;
         width_offset = gcfg.WIDTH_ADJ;
     } else {
-        curveIdx = primIdx;
+        curveIdx = 0;// TODO: fix this so idx is identified somewhere via the surfaceData primIdx;
     }
 
     const mcx::ImplicitCurve& curve = getCurveFromID(curveIdx);
-    
+    //printf("Curve vertex1: %f, %f, %f, Curve vertex2: %f, %f, %f, Curve width: %f\n", curve.vertex1.x, curve.vertex1.y, curve.vertex1.z, curve.vertex2.x, curve.vertex2.y, curve.vertex2.z, curve.width); 
+
     // vector going from pt2 to pt1:
     float3 lineseg_AB = curve.vertex1-curve.vertex2;
     float width = curve.width + width_offset;
-    float t_min = optixGetRayTmin();
-    float t_max = optixGetRayTmax();
+    //float t_min = optixGetRayTmin();
+    //float t_max = optixGetRayTmax();
     // get normalized ray direction
     float3 ray_dir = normalize(optixGetWorldRayDirection());
     float3 ray_origin = optixGetWorldRayOrigin();

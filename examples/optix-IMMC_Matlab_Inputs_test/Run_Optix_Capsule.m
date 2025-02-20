@@ -1,3 +1,7 @@
+
+cd('/drives/mobi1/users/aidenlewis/optix_immc_projects/optix-shijiever/mmc/examples/optix-IMMC_Matlab_Inputs_test')
+addpath(genpath('/drives/mobi1/users/aidenlewis/optix_immc_projects/optix-shijiever'));
+
 %% Prep a 60 by 60 by 60 mm cube with a 10mm sphere embedded
 % create a surface mesh for a 10 mm radius sphere
 
@@ -18,7 +22,7 @@ cfg.tend=5e-9;
 cfg.tstep=5e-9;
 cfg.prop=[0 0 1 1;
     0.005,  1, 0, 1.37;
-    0.05,  1, 0, 1.37
+    0.001,  1, 0, 1.37
     ];
 cfg.debuglevel='TP';
 cfg.isreflect=0;
