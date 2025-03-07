@@ -48,7 +48,7 @@ cfg.isreflect=0;
 cfg.node = no;
 cfg.elem = el;
 cfg.outputtype = 'fluence';
-cfg.compute = 'optix';
+%cfg.compute = 'optix';
 
 fluence_MMC = mmclab(cfg);
 fluence_MMC = fluence_MMC.data;
@@ -59,7 +59,7 @@ mcxplotvol(log(fluence_MMC));
 fluence_MMC=squeeze(fluence_MMC(30,1:60,1:60,:));
 
 fluence_MMC=rot90(fluence_MMC);
-clines = 10;
+clines = -15:1.2:-1;
 contour(log(fluence_MMC), clines, '-k')
 axis equal;
 

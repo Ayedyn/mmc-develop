@@ -39,6 +39,29 @@ mcxplotvol(log(fluence_MMC));
 fluence_MMC=squeeze(fluence_MMC(30,1:60,1:60,:));
 
 fluence_MMC=rot90(fluence_MMC);
-clines = 10;
+clines = -15:1.2:-1;
 contour(log(fluence_MMC), clines, '-k')
+axis equal;
+
+%% plot optix results
+hold on;
+% read output
+fid=fopen('optix.bin');
+output=fread(fid,'float64');
+
+% retrieve results
+res=reshape(output,[60,60,60,10]);
+%sum along the time dimension
+res = sum(res, 4);
+
+% visualize
+fluence_IMMC=res;
+fluence_IMMC=fluence_IMMC./1e8;
+
+% prepare DMMC results
+fluence_IMMC=squeeze(fluence_IMMC(30,:,:,:));
+
+fluence_IMMC=rot90(fluence_IMMC);
+clines = -15:1.2:-1;
+contour(log(fluence_IMMC), clines, ':r')
 axis equal;

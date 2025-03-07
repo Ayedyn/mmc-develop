@@ -15,7 +15,7 @@
 #include <cstring>
 #include <cuda_runtime.h>
 #include "incbin.h"
-#include "shader_pipeline.h"
+//#include "shader_pipeline.h"
 #include "tetrahedral_mesh.h"
 #include "util.h"
 #include "device_buffer.h"
@@ -711,6 +711,58 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 	return result;
 }
 
+    // helper function for getting built-in intersection shader for sphere 
+    static OptixModule getSphereModule(OptixDeviceContext ctx, OptixPipelineCompileOptions& pipeline_compile_options) {        
+        OptixModuleCompileOptions module_compile_options = {};
+#if !defined( NDEBUG )
+        module_compile_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
+        module_compile_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
+#endif
+
+        OptixBuiltinISOptions builtin_is_options = {};
+
+        builtin_is_options.usesMotionBlur = false;
+        builtin_is_options.builtinISModuleType = OPTIX_PRIMITIVE_TYPE_SPHERE;
+        OptixModule sphere_module;
+        OPTIX_CHECK(optixBuiltinISModuleGet(ctx, &module_compile_options, &pipeline_compile_options,
+            &builtin_is_options, &sphere_module));
+        return sphere_module;
+    }
+
+    // Helper function loads shader module using the ptx string and "optixModuleCreateFromPTX" function
+    OptixModule loadShaderModule(std::string ptx, OptixDeviceContext ctx, const unsigned int numPayloads, const unsigned int numAttribs, std::string launchParamName)
+    {
+        // set up optix pipeline compile options
+        OptixPipelineCompileOptions pipelineOpts = {};                                                                                                                                                           
+        pipelineOpts.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_ANY;
+        pipelineOpts.numPayloadValues = numPayloads;
+        pipelineOpts.numAttributeValues = numAttribs;
+        pipelineOpts.pipelineLaunchParamsVariableName = launchParamName.c_str();
+        pipelineOpts.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_TRIANGLE | OPTIX_PRIMITIVE_TYPE_FLAGS_SPHERE | OPTIX_PRIMITIVE_TYPE_FLAGS_CUSTOM;
+
+#ifndef NDEBUG
+        pipelineOpts.exceptionFlags = OPTIX_EXCEPTION_FLAG_DEBUG | OPTIX_EXCEPTION_FLAG_TRACE_DEPTH | OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW;
+#else
+        pipelineOpts.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
+#endif
+        // set up optix module compile options
+        OptixModuleCompileOptions opts = {};
+        opts.maxRegisterCount = OPTIX_COMPILE_DEFAULT_MAX_REGISTER_COUNT;
+        opts.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
+
+#ifndef NDEBUG
+        opts.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
+        opts.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
+#else
+        opts.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
+        opts.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
+#endif
+
+        OptixModule mod;
+        OPTIX_CHECK(optixModuleCreateFromPTX(ctx, &opts, &pipelineOpts, ptx.c_str(), ptx.length(), nullptr, nullptr, &mod));
+        return mod;
+    }
+
 // constructor
 McxContext::McxContext() {
 
@@ -736,53 +788,144 @@ McxContext::McxContext() {
 	OPTIX_CHECK(
 	    optixDeviceContextCreate(nullptr, &opts, &this->optixContext));
 
+// TODO: MONOLITH THIS CODE:
+
 	std::string ptx = std::string(mmcShaderPtx);
-	ShaderFunctionSet set = ShaderFunctionSet(
-	    "__raygen__rg", "__miss__ms",
 
-	    // this is initializing and feeding a standard vector of hitgroups
-	    {ShaderFunctionSet::HitGroup("__closesthit__ch",
-					 "__intersection__customlinearcurve"),
-	     ShaderFunctionSet::HitGroup("__closesthit__ch", 
-			     		"__BUILTIN_SPHERE__"),
-	     ShaderFunctionSet::HitGroup("__closesthit__ch", "") 
-	     },
-
-	    "gcfg");
-	
 	unsigned int TOTAL_PARAM_COUNT = 18;
+    unsigned int NUM_ATTRIBS = 4;
 
-	this->devicePipeline =
-	    ShaderPipeline(this->optixContext, ptx, set, TOTAL_PARAM_COUNT, 4);
+    // decide on pipeline compile options:
+        OptixPipelineCompileOptions pipelineOpts = {};
+        pipelineOpts.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_ANY;
+        pipelineOpts.numPayloadValues = TOTAL_PARAM_COUNT;
+        pipelineOpts.numAttributeValues = NUM_ATTRIBS;
+        pipelineOpts.pipelineLaunchParamsVariableName = "gcfg";
+        pipelineOpts.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_TRIANGLE | OPTIX_PRIMITIVE_TYPE_FLAGS_SPHERE | OPTIX_PRIMITIVE_TYPE_FLAGS_CUSTOM;
 
-        // raygen   
+#ifndef NDEBUG
+        pipelineOpts.exceptionFlags = OPTIX_EXCEPTION_FLAG_DEBUG | OPTIX_EXCEPTION_FLAG_TRACE_DEPTH | OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW;
+#else
+        pipelineOpts.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
+#endif
+
+        std::vector<OptixProgramGroup> groups;// needed to create OptixPipeline using Optix's optixPipelineCreate function
+
+        OptixModule shader_module = loadShaderModule(ptx, this->optixContext, TOTAL_PARAM_COUNT, NUM_ATTRIBS, "gcfg");
+
+        // prepare raygen program 
+        OptixProgramGroup raygen_group;   
+
+        OptixProgramGroupOptions ropts = {};
+        OptixProgramGroupDesc rdesc = {};
+        rdesc.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+        rdesc.raygen.module = shader_module;
+        rdesc.raygen.entryFunctionName = "__raygen__rg";
+        OPTIX_CHECK(optixProgramGroupCreate(this->optixContext,
+                        &rdesc,
+                        1,
+                        &ropts,
+                        nullptr,
+                        nullptr,
+                        &raygen_group));
+        groups.push_back(raygen_group);
+
+        // pack raygen sbt header   
         SbtRecord<void*> rrec = SbtRecord<void*>(nullptr);
-        OPTIX_CHECK(optixSbtRecordPackHeader(this->devicePipeline.raygenProgram(), &rrec));
+        OPTIX_CHECK(optixSbtRecordPackHeader(raygen_group, &rrec));
+        // sbt record data is empty for raygen
         DeviceBuffer <SbtRecord<void*>> raygenRecord = rrec;
-        
-        // miss
+
+        // prepare miss program
+        OptixProgramGroup miss_group = OptixProgramGroup();
+
+        OptixProgramGroupOptions mopts = {};        
+        OptixProgramGroupDesc mdesc = {};
+        mdesc.kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
+        mdesc.miss.module = shader_module;
+        mdesc.miss.entryFunctionName = "__miss__ms";
+        OPTIX_CHECK(optixProgramGroupCreate(this->optixContext, &mdesc, 1, &mopts, nullptr, nullptr, &miss_group));
+        groups.push_back(miss_group);
+
+        // pack miss sbt header
         SbtRecord<void*> mrec = SbtRecord<void*>(nullptr);
-        OPTIX_CHECK(optixSbtRecordPackHeader(this->devicePipeline.missProgram(), &mrec));
+        OPTIX_CHECK(optixSbtRecordPackHeader(miss_group, &mrec));
         DeviceBuffer <SbtRecord<void*>> missRecord = mrec;
 
-        // hit programs
+        // prepare hit programs for capsule, sphere, triangle
+        //capsule
+         
+        OptixProgramGroupOptions hopts = {};
+        OptixProgramGroupDesc hdesc = {};
+        hdesc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
+        hdesc.hitgroup.moduleCH = shader_module;
+        hdesc.hitgroup.entryFunctionNameCH = "__closesthit__ch";
+        hdesc.hitgroup.moduleIS = shader_module;
+        hdesc.hitgroup.entryFunctionNameIS = "__intersection__customlinearcurve";
+
+        std::vector<OptixProgramGroup> hitgroupProgramGroups;
+        OptixProgramGroup hpg_cap;
+        OPTIX_CHECK(optixProgramGroupCreate(this->optixContext, &hdesc, 1, &hopts, nullptr, nullptr, &hpg_cap));
+        groups.push_back(hpg_cap);
+        hitgroupProgramGroups.push_back(hpg_cap);
+
+        //sphere
+        hopts = {};
+        hdesc = {};
+        hdesc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP; 
+        hdesc.hitgroup.moduleCH = shader_module;
+        hdesc.hitgroup.entryFunctionNameCH = "__closesthit__ch";
+        hdesc.hitgroup.moduleIS = getSphereModule(this->optixContext, pipelineOpts);
+        hdesc.hitgroup.entryFunctionNameIS = nullptr;
+       
+        OptixProgramGroup hpg_sph;
+        OPTIX_CHECK(optixProgramGroupCreate(this->optixContext, &hdesc, 1, &hopts, nullptr, nullptr, &hpg_sph));
+        groups.push_back(hpg_sph);
+        hitgroupProgramGroups.push_back(hpg_sph);
+
+        //triangle
+        hopts = {};
+        hdesc = {};
+        hdesc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
+        hdesc.hitgroup.moduleCH = shader_module;
+        hdesc.hitgroup.entryFunctionNameCH = "__closesthit__ch";
+
+        OptixProgramGroup hpg_tri;
+        OPTIX_CHECK(optixProgramGroupCreate(this->optixContext, &hdesc, 1, &hopts, nullptr, nullptr, &hpg_tri));
+        groups.push_back(hpg_tri);
+        hitgroupProgramGroups.push_back(hpg_tri);
+
+        // create pipeline
+         OptixPipelineLinkOptions pipeline_link_opts = {};
+         pipeline_link_opts.maxTraceDepth = 1;
+ 
+ #ifndef NDEBUG
+         pipeline_link_opts.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
+ #else
+         pipeline_link_opts.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
+ #endif
+ 
+        OptixPipeline pipeline;
+        OPTIX_CHECK(optixPipelineCreate(this->optixContext, &pipelineOpts, &pipeline_link_opts, groups.data(), groups.size(), nullptr, nullptr, &pipeline));         
+        this->devicePipeline = pipeline;
+
+        // pack hit sbt records
         std::vector<void*> h = {0,0,0};
         std::vector<SbtRecord<void*>> grecs;
-        if (h.size() != this->devicePipeline.hitgroupPrograms().size()) {
+        if (h.size() != hitgroupProgramGroups.size()) {
             throw std::runtime_error("Hitgroup data count was not the same as pipeline hitgroup count");
         }
-
         for (int i = 0; i < h.size(); i++)
         {
             grecs.push_back(SbtRecord<void*>(h[i]));
             OPTIX_CHECK(optixSbtRecordPackHeader(
-                        this->devicePipeline.hitgroupPrograms()[i],
+                        hitgroupProgramGroups[i],
                         &grecs[i]));
         }
-
         DeviceBuffer<SbtRecord<void*>> hitgroupRecords = 
             DeviceBuffer<SbtRecord<void*>>(grecs.data(), grecs.size());
 
+        // create SBT from records
         OptixShaderBindingTable sbt = {};
 
         sbt.raygenRecord = raygenRecord.handle();
@@ -794,6 +937,8 @@ McxContext::McxContext() {
         sbt.hitgroupRecordCount = grecs.size();
 
         this->SBT = sbt;
+
+// END OF CODE TO BE MONOLITHED
 }
 
 // move constructor
@@ -801,7 +946,7 @@ McxContext::McxContext(McxContext&& src) {
 	this->optixContext = src.optixContext;
 	this->devicePipeline = std::move(src.devicePipeline);
 	src.optixContext = OptixDeviceContext();
-	src.devicePipeline = ShaderPipeline();
+	src.devicePipeline = nullptr;
 }
 
 // this function is run by the main and performs the mmc-optix simulation given
@@ -990,7 +1135,7 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 	// computations, height of computations, and length of computations From
 	// a GPU perspective this is done with a linear set of kernels of length
 	// photoncount.
-	OPTIX_CHECK(optixLaunch(this->devicePipeline.handle(), nullptr, \
+	OPTIX_CHECK(optixLaunch(this->devicePipeline, nullptr, \
 			paraBuffer.handle(),
 				sizeof(gcfg), &this->SBT, launchWidth,
 				1, 1));
@@ -1058,7 +1203,7 @@ void McxContext::messageHandler(uint32_t level, const char* tag,
 McxContext::~McxContext() {
 	//this->deviceSbt = ShaderBindingTable<void*, void*, void*>();
      
-    this->devicePipeline = ShaderPipeline();
+    this->devicePipeline = nullptr;
 	optixDeviceContextDestroy(this->optixContext);
 	cudaDeviceSynchronize();
 }

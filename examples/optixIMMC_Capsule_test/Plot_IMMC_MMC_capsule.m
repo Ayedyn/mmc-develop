@@ -1,5 +1,6 @@
 % read output
-fid=fopen('optix_basic_capsule_1e8_nodebug.bin');
+%fid=fopen('optix_basic_capsule_1e8_nodebug.bin');
+fid=fopen('optix.bin');
 output=fread(fid,'float64');
 
 % retrieve results
@@ -51,7 +52,7 @@ hold on;
 fluence_MMC=squeeze(fluence_MMC(30,1:60,1:60,:));
 
 fluence_MMC=rot90(fluence_MMC);
-clines = -15:1:-1;
+clines = -15:1.2:-1;
 contour(log(fluence_MMC), clines, '-k')
 axis equal;
 
@@ -76,7 +77,7 @@ fluence_IMMC=fluence_IMMC./1e8;
 fluence_IMMC=squeeze(fluence_IMMC(30,:,:,:));
 
 fluence_IMMC=rot90(fluence_IMMC);
-clines = -15:1:-1;
+clines = -15:1.2:-1;
 contour(log(fluence_IMMC), clines, ':r')
 axis equal;
 

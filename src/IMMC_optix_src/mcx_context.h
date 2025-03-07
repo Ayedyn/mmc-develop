@@ -4,7 +4,7 @@
 #include <optix.h>
 
 #include "mmc_optix_launchparam.h"
-#include "shader_pipeline.h"
+//#include "shader_pipeline.h"
 #include "tetrahedral_mesh.h"
 
 namespace mcx {
@@ -12,7 +12,7 @@ namespace mcx {
 	private:
 		
 		OptixDeviceContext optixContext;
-		ShaderPipeline devicePipeline;
+		OptixPipeline devicePipeline;
         OptixShaderBindingTable SBT;
 
 		McxContext(const McxContext&) = default;
