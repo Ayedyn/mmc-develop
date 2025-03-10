@@ -1,6 +1,5 @@
 #include "mcx_context.h"
 #include <cuda_runtime.h>
-//#include "CUDABuffer.h"
 #include <optix.h>
 #include <optix_function_table_definition.h>
 #include <optix_stubs.h>
@@ -16,7 +15,6 @@
 #include <cuda_runtime.h>
 #include "incbin.h"
 #include "tetrahedral_mesh.h"
-//#include "util.h"
 #include "mmc_optix_launchparam.h"
 #include "mmc_utils.h"
 #include "mmc_mesh.h"
@@ -119,17 +117,13 @@ static void createAccelerationStructure(
 // Builds a an acceleration structure of linear (cylindrical with spherical
 // end-caps) custom curves. Had to make it custom because OptiX does not support
 // in-to-out ray tracing vertexBuffer represents a list of the endpoints of each
-// curve segment widthBuffer represents a list of the swept radius between each
-// vertex Takes returns the AS as a devicebytebuffer and adds the AS to the
-// traversable handle passed by reference
+// curve segment widthBuffer represents a list of the swept radius between each vertex
 static void createCurveAccelStructure(
     OptixDeviceContext ctx, OptixTraversableHandle& handle, int primitiveOffset,
     std::vector<float3>& vertexVector, std::vector<float>& widthVector) {
 	OptixBuildInput buildInput = {};
 	buildInput.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
 
-	// tells the number of curve segments (pills) to create
-	// there are two vertices per curve segment
 	if (vertexVector.size() % 2 == 0) {
 		buildInput.customPrimitiveArray.numPrimitives =
 		    vertexVector.size() / 2;
@@ -173,7 +167,6 @@ static void createCurveAccelStructure(
 	buildInput.customPrimitiveArray.primitiveIndexOffset = primitiveOffset;
 
 	// compact and build the acceleration structure
-
 	OptixAccelBuildOptions accelerationOptions = {};
 	accelerationOptions.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
 	accelerationOptions.operation = OPTIX_BUILD_OPERATION_BUILD;
@@ -217,10 +210,8 @@ static void createSphereAccelerationStructure(
 #endif
 }
 
-// instance acceleration structure is created to help store triangular meshes
-// and save on memory by storing them as instances with different transforms
-// (translation, rotation, etc)
-// also allows the combining of spheres and surfaces onto a single acceleration structure
+// instance acceleration structure
+// allows the combining of spheres, capsules, and surfaces onto a single acceleration structure
 static void createInstanceAccelerationStructure(
     OptixDeviceContext ctx, OptixTraversableHandle& handle,
     std::vector<OptixTraversableHandle> combinedHandles) {
@@ -258,37 +249,26 @@ static void createInstanceAccelerationStructure(
 #endif
 }
 
-// adds curve primitives to a triangular manifold that it interects, onto a
-// traversable handle, generates resulting primitives as a devicebytebuffer,
-// result. tetrahedral mesh needs to be modified with curve objects that have
-// vertex1, vertex2, and widths
+// creates an instance acceleration structure of capsules and spheres superimposed on a surface 
 static OptixTraversableHandle generateManifoldWithLinearCurves(
     OptixDeviceContext ctx, osc::CUDABuffer& triangleVertexBuffer, int triangleVertexCount,
     int& primitiveCount,
     TetrahedralManifold& manifold, float curveWidthAdjustment,
     float sphereRadiusAdjustment) {
 
-	std::vector<uint32_t> sbt = std::vector<uint32_t>();
-
 	// create the curve acceleration structures
-	std::vector<float3> curveVertices = std::vector<float3>();
-	std::vector<float> curveWidths = std::vector<float>();
+	std::vector<float3> curveVertices;
+	std::vector<float> curveWidths;
 
 	// Curve vertex coordinates and widths (radius) are inside of
 	// tetrahedral manifold
-	unsigned int curvecount = 0;
-	unsigned int vertices_per_curve = 2;
 	for (ImplicitCurve curve : manifold.curves) {
 		curveVertices.push_back(curve.vertex1);
 		curveVertices.push_back(curve.vertex2);
 		curveWidths.push_back(curve.width - curveWidthAdjustment);
-		// the index should be the current count of curves*2
-		// (vertices per curve)+1
-		curvecount = curvecount + 1;
 	}
 
 	OptixTraversableHandle curvesHandle;
-
 	if (manifold.curves.size() > 0) {
 		createCurveAccelStructure(
 		    ctx, curvesHandle, primitiveCount, curveVertices,
@@ -299,13 +279,11 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 	// create the sphere acceleration structures
 	std::vector<float3> sphereCenters = std::vector<float3>();
 	std::vector<float> sphereRadii = std::vector<float>();
-	sbt = std::vector<uint32_t>();
 
 	// Sphere coordinates and radii is inside of tetrahedral manifold
 	for (ImplicitSphere sphere : manifold.spheres) {
 		sphereCenters.push_back(sphere.position);
 		sphereRadii.push_back(sphere.radius - sphereRadiusAdjustment);
-		sbt.push_back(0);
 	}
 
     osc::CUDABuffer centerBuffer;
@@ -315,7 +293,6 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 	radiiBuffer.alloc_and_upload(sphereRadii);
 
 	OptixTraversableHandle spheresHandle;
-
 	if (manifold.spheres.size() > 0) {
 		// this creates the acceleration structures for spheres
 		createSphereAccelerationStructure(
@@ -324,12 +301,10 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 		primitiveCount += manifold.spheres.size();
 	}
 
-	// create the mesh acceleration structures
-	std::vector<uint3> indices = std::vector<uint3>();
-
+	// create the triangle mesh acceleration structures
+	std::vector<uint3> indices;
 	for (TetrahedronBoundary b : manifold.triangles) {
 		indices.push_back(b.indices);
-		sbt.push_back(0);
 	}
 
 	OptixTraversableHandle handle;
@@ -342,8 +317,7 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 	primitiveCount += manifold.triangles.size();
 
 	// combine the handles
-	std::vector<OptixTraversableHandle> combinedHandles =
-	    std::vector<OptixTraversableHandle>();
+	std::vector<OptixTraversableHandle> combinedHandles;
 	if (manifold.curves.size() > 0) {
 		combinedHandles.push_back(curvesHandle);
 	}
@@ -358,7 +332,8 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 // Prepares and organizes two vectors of traversable handles, one where spheres
 // override mesh properties and one where mesh overrides sphere properties Calls
 // functions to search for/define manifolds, create traversable handles and
-// their acceleration structures.
+// their acceleration structures. Also preps data for materials tracking on GPU and sets
+// starting material. TODO: This function does too much and needs to be split up
 static void generateTetrahedralAccelerationStructures(
     OptixDeviceContext ctx, TetrahedralMesh& mesh,
     std::vector<PrimitiveSurfaceData>& surfaceData,
@@ -373,8 +348,7 @@ static void generateTetrahedralAccelerationStructures(
 	    mesh.buildManifold(tetrahedron_to_manifold);
 
 	handles = std::vector<OptixTraversableHandle>();
-	std::vector<OptixTraversableHandle> insideSphereHandles =
-	    std::vector<OptixTraversableHandle>();
+	std::vector<OptixTraversableHandle> insideSphereHandles;
 
     osc::CUDABuffer vertexBuffer;
 	    vertexBuffer.alloc_and_upload(mesh.nodes);
@@ -386,8 +360,6 @@ static void generateTetrahedralAccelerationStructures(
 	// two separate vectors of traversable handles are created, one for
 	// outside spheres
 	for (TetrahedralManifold manifold : manifolds) {
-//		 handles.push_back(generateManifoldWithSpheres(ctx,
-//		 vertexBuffer, primitiveCount, result, manifold, 0.0));
 		 handles.push_back(generateManifoldWithLinearCurves(
 		    ctx, vertexBuffer, mesh.nodes.size(), primitiveCount, manifold, 0.0,
 		    0.0));
@@ -397,9 +369,6 @@ static void generateTetrahedralAccelerationStructures(
 	num_inside_prims = primitiveCount;
 	// one for inside spheres
 	for (TetrahedralManifold manifold : manifolds) {
-//		 insideSphereHandles.push_back(generateManifoldWithSpheres(ctx,
-//		 vertexBuffer, primitiveCount, result, manifold, 1.0 /
-//		 1024.0));
 		// constant to determine how much wider outside-inside intersection tracking primitives should be
 		insideSphereHandles.push_back(generateManifoldWithLinearCurves(
 		    ctx, vertexBuffer, mesh.nodes.size(), primitiveCount, manifold,
@@ -412,10 +381,6 @@ static void generateTetrahedralAccelerationStructures(
 	// of the same material
 	// This geometric and material data is fed to the device side for
 	// closest hit through mcx_params
-	//
-	// ask douglas about weird ordering of these loops:
-	// outside manifolds, inside implicits, inside manifolds,
-	// outside implicits
 	surfaceData = std::vector<PrimitiveSurfaceData>();
 
 	// record curve info to pass to the device
@@ -475,7 +440,7 @@ static void generateTetrahedralAccelerationStructures(
 	for (int i = 0; i < manifolds.size(); i++) {
 		for (ImplicitCurve c : manifolds[i].curves) {
 			float4 facenorm_and_mediumid = make_float4(0,0,0,
-                    storeuintAsFloat(1)); // TODO: currently hardcoding exiting photons as 1 materialID
+                    storeuintAsFloat(1));
             surfaceData.push_back(
 			    PrimitiveSurfaceData{
                   facenorm_and_mediumid,
@@ -488,7 +453,7 @@ static void generateTetrahedralAccelerationStructures(
 		for (ImplicitSphere s : manifolds[i].spheres) {
 			float4 facenorm_and_mediumid = make_float4(
                     s.position.x, s.position.y, s.position.z, 
-                    storeuintAsFloat(SPHERE_MATERIAL)); // TODO: currently hardcoding exiting photons as 1 materialID
+                    storeuintAsFloat(SPHERE_MATERIAL));
             surfaceData.push_back(
                 			    PrimitiveSurfaceData{
 			     facenorm_and_mediumid, handles[i]});
@@ -513,8 +478,6 @@ static void generateTetrahedralAccelerationStructures(
                 surfaceData.push_back(PrimitiveSurfaceData{
                     facenorm_and_mediumid,
 				    nullhandle});
-			    // TODO: figure out if this should be the mesh material instead of 0
-                // this may be to account for surfaces of exiting the domain?	
 			}
 		}
 	#ifndef NDEBUG
@@ -541,9 +504,7 @@ static void generateTetrahedralAccelerationStructures(
         module_compile_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
         module_compile_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
 #endif
-
         OptixBuiltinISOptions builtin_is_options = {};
-
         builtin_is_options.usesMotionBlur = false;
         builtin_is_options.builtinISModuleType = OPTIX_PRIMITIVE_TYPE_SPHERE;
         OptixModule sphere_module;
@@ -556,13 +517,12 @@ static void generateTetrahedralAccelerationStructures(
     OptixModule loadShaderModule(std::string ptx, OptixDeviceContext ctx, const unsigned int numPayloads, const unsigned int numAttribs, std::string launchParamName)
     {
         // set up optix pipeline compile options
-        OptixPipelineCompileOptions pipelineOpts = {};                                                                                                                                                           
+        OptixPipelineCompileOptions pipelineOpts = {};        
         pipelineOpts.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_ANY;
         pipelineOpts.numPayloadValues = numPayloads;
         pipelineOpts.numAttributeValues = numAttribs;
         pipelineOpts.pipelineLaunchParamsVariableName = launchParamName.c_str();
         pipelineOpts.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_TRIANGLE | OPTIX_PRIMITIVE_TYPE_FLAGS_SPHERE | OPTIX_PRIMITIVE_TYPE_FLAGS_CUSTOM;
-
 #ifndef NDEBUG
         pipelineOpts.exceptionFlags = OPTIX_EXCEPTION_FLAG_DEBUG | OPTIX_EXCEPTION_FLAG_TRACE_DEPTH | OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW;
 #else
@@ -572,7 +532,6 @@ static void generateTetrahedralAccelerationStructures(
         OptixModuleCompileOptions opts = {};
         opts.maxRegisterCount = OPTIX_COMPILE_DEFAULT_MAX_REGISTER_COUNT;
         opts.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
-
 #ifndef NDEBUG
         opts.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
         opts.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
@@ -580,7 +539,6 @@ static void generateTetrahedralAccelerationStructures(
         opts.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
         opts.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
 #endif
-
         OptixModule mod;
         OPTIX_CHECK(optixModuleCreateFromPTX(ctx, &opts, &pipelineOpts, ptx.c_str(), ptx.length(), nullptr, nullptr, &mod));
         return mod;
@@ -612,7 +570,6 @@ McxContext::McxContext() {
 	    optixDeviceContextCreate(nullptr, &opts, &this->optixContext));
 
 // TODO: MOVE THIS SBT CODE TO SEPARATE FUNCTION:
-
 	std::string ptx = std::string(mmcShaderPtx);
 
 	unsigned int TOTAL_PARAM_COUNT = 18;
@@ -805,13 +762,10 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 
 	unsigned int num_inside_prims;
 	const float WIDTH_ADJ = 1.0 / 10240.0;
-	// accelerationStructures variable isn't actually used anywhere,
-	// function modifies almost everything by reference
-	    generateTetrahedralAccelerationStructures(
+	generateTetrahedralAccelerationStructures(
 		this->optixContext, mesh, triangleData, curveData, handles,
 		startMedium, startHandle, startInImplicit, num_inside_prims, WIDTH_ADJ);
 
-// print surface data for debugging
 #ifndef NDEBUG
 	for (unsigned int i=0; i<triangleData.size(); ++i){
 		printf("\nThe %dth surface has a material of %d\n", i, storeFloatAsuint(triangleData[i].fnorm.w));
@@ -906,7 +860,6 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 	    // initializing variables for output of data
         unsigned int outputSize = (gcfg.crop0.w << 1);
         float* outputHostBuffer = (float*) calloc(outputSize, sizeof(float));    
-        //float outputHostBuffer[outputSize];
         osc::CUDABuffer outputBuffer;
         outputBuffer.alloc_and_upload(outputHostBuffer, outputSize);
 
