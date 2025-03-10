@@ -6,65 +6,9 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
-
 #include "mcx_context.h"
 #include "mmc_optix_launchparam.h"
-
 #include "tetrahedral_mesh.h"
-
-// helps read binary files for meshes
-static std::vector<char> read_all_bytes(char const* filename) {
-	std::ifstream ifs(filename, std::ios::binary | std::ios::ate);
-	std::ifstream::pos_type pos = ifs.tellg();
-
-	if (pos == 0) {
-		return std::vector<char>{};
-	}
-
-	std::vector<char> result(pos);
-
-	ifs.seekg(0, std::ios::beg);
-	ifs.read(&result[0], pos);
-
-	return result;
-}
-
-// helper function: subtracts each element of a 4 dimensional vector
-static uint4 sub(uint4 a, uint4 b) {
-	return make_uint4(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w);
-}
-
-// Head atlas tetrahedral mesh
-mcx::TetrahedralMesh input_mesh() {
-	int elements = 335713;
-	int nodes = 59225;
-
-	std::vector<char> bytes = read_all_bytes("input_head_atlas.bin");
-
-	std::vector<float3> nodeList = std::vector<float3>();
-	std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
-
-	for (int i = 0; i < nodes; i++) {
-		nodeList.push_back(((float3*)bytes.data())[i]);
-	}
-
-	for (int i = 0; i < elements; i++) {
-		uint16_t* p =
-		    (uint16_t*)(bytes.data() + nodes * (3 * sizeof(float)) +
-				i * 4 * sizeof(uint16_t));
-		tets.push_back(
-		    {sub(make_uint4(*p, *(p + 1), *(p + 2), *(p + 3)),
-			 make_uint4(1, 1, 1, 1)),
-		     (uint32_t)((
-			 (uint8_t*)(bytes.data() + nodes * (3 * sizeof(float)) +
-				    elements * 4 * sizeof(uint16_t)))[i]) -
-			 1});
-	}
-
-	return mcx::TetrahedralMesh(nodeList, tets,
-				    std::vector<mcx::ImplicitSphere>(),
-				    std::vector<mcx::ImplicitCurve>());
-}
 
 mcx::TetrahedralMesh basic_cube_test() {
 	std::vector<uint4> elements = {
@@ -464,6 +408,4 @@ int main() {
 		std::cout << "A runtime error occured.\n";
 		std::cout << err.what();
 	}
-
-	std::getchar();
 }
