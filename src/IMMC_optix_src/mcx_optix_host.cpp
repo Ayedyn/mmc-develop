@@ -11,401 +11,420 @@
 #include "tetrahedral_mesh.h"
 
 mcx::TetrahedralMesh basic_cube_test() {
-	std::vector<uint4> elements = {
-	    make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
-	    make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
-	    make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8),
-	};
+    std::vector<uint4> elements = {
+        make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
+        make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
+        make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8),
+    };
 
-	std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
+    std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
 
-	uint32_t k = 0;
-	for (uint4 elem : elements) {
-		uint32_t label = 1;
+    uint32_t k = 0;
 
-		tets.push_back(
-		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
-		     label});
+    for (uint4 elem : elements) {
+        uint32_t label = 1;
 
-		k++;
-	}
-	// define placeholder spheres to simulate
-	std::vector<mcx::ImplicitSphere> spheres =
-	    std::vector<mcx::ImplicitSphere>();
-	// define curves to simulate
-	std::vector<mcx::ImplicitCurve> curves =
-	    std::vector<mcx::ImplicitCurve>();
+        tets.push_back( {
+            make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
+            label});
 
-	mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
-	    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
-				 make_float3(0, 60, 0), make_float3(60, 60, 0),
-				 make_float3(0, 0, 60), make_float3(60, 0, 60),
-				 make_float3(0, 60, 60),
-				 make_float3(60, 60, 60)}),
-	    tets, spheres, curves);
+        k++;
+    }
 
-	return mesh;
+    // define placeholder spheres to simulate
+    std::vector<mcx::ImplicitSphere> spheres =
+        std::vector<mcx::ImplicitSphere>();
+    // define curves to simulate
+    std::vector<mcx::ImplicitCurve> curves =
+        std::vector<mcx::ImplicitCurve>();
+
+    mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
+                                    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
+                                            make_float3(0, 60, 0), make_float3(60, 60, 0),
+                                            make_float3(0, 0, 60), make_float3(60, 0, 60),
+                                            make_float3(0, 60, 60),
+                                            make_float3(60, 60, 60)}),
+                                    tets, spheres, curves);
+
+    return mesh;
 }
 
 
 // Test code generating cube shaped mesh with curve inside it
 mcx::TetrahedralMesh sphereshaped_curve_test() {
-	std::vector<uint4> elements = {
-	    make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
-	    make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
-	    make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8),
-	};
+    std::vector<uint4> elements = {
+        make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
+        make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
+        make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8),
+    };
 
-	std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
+    std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
 
-	uint32_t k = 0;
-	for (uint4 elem : elements) {
-		uint32_t label = 1;
+    uint32_t k = 0;
 
-		tets.push_back(
-		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
-		     label});
+    for (uint4 elem : elements) {
+        uint32_t label = 1;
 
-		k++;
-	}
-	// define placeholder spheres to simulate
-	std::vector<mcx::ImplicitSphere> spheres =
-	    std::vector<mcx::ImplicitSphere>();
-	// define curves to simulate
-	std::vector<mcx::ImplicitCurve> curves =
-	    std::vector<mcx::ImplicitCurve>();
-	// sphere-like curve
-		curves.push_back({make_float3(30, 30, 15), make_float3(30.00001, 30, 15), 10});
+        tets.push_back( {
+            make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
+            label});
 
-	mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
-	    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
-				 make_float3(0, 60, 0), make_float3(60, 60, 0),
-				 make_float3(0, 0, 60), make_float3(60, 0, 60),
-				 make_float3(0, 60, 60),
-				 make_float3(60, 60, 60)}),
-	    tets, spheres, curves);
+        k++;
+    }
 
-	return mesh;
+    // define placeholder spheres to simulate
+    std::vector<mcx::ImplicitSphere> spheres =
+        std::vector<mcx::ImplicitSphere>();
+    // define curves to simulate
+    std::vector<mcx::ImplicitCurve> curves =
+        std::vector<mcx::ImplicitCurve>();
+    // sphere-like curve
+    curves.push_back({make_float3(30, 30, 15), make_float3(30.00001, 30, 15), 10});
+
+    mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
+                                    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
+                                            make_float3(0, 60, 0), make_float3(60, 60, 0),
+                                            make_float3(0, 0, 60), make_float3(60, 0, 60),
+                                            make_float3(0, 60, 60),
+                                            make_float3(60, 60, 60)}),
+                                    tets, spheres, curves);
+
+    return mesh;
 }
 
 // Test code generating cube shaped mesh with capsule inside it
 mcx::TetrahedralMesh basic_capsule_test() {
-	std::vector<uint4> elements = {
-	    make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
-	    make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
-	    make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8),
-	};
+    std::vector<uint4> elements = {
+        make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
+        make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
+        make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8),
+    };
 
-	std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
+    std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
 
-	uint32_t k = 0;
-	for (uint4 elem : elements) {
-		uint32_t label = 1;
+    uint32_t k = 0;
 
-		tets.push_back(
-		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
-		     label});
+    for (uint4 elem : elements) {
+        uint32_t label = 1;
 
-		k++;
-	}
-	// define placeholder spheres to simulate
-	std::vector<mcx::ImplicitSphere> spheres =
-	    std::vector<mcx::ImplicitSphere>();
+        tets.push_back( {
+            make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
+            label});
+
+        k++;
+    }
+
+    // define placeholder spheres to simulate
+    std::vector<mcx::ImplicitSphere> spheres =
+        std::vector<mcx::ImplicitSphere>();
     //placeholder sphere
     spheres.push_back({make_float3(60, 60, 60), 0.0001});
-	// define curves to simulate
-	std::vector<mcx::ImplicitCurve> curves =
-	    std::vector<mcx::ImplicitCurve>();
+    // define curves to simulate
+    std::vector<mcx::ImplicitCurve> curves =
+        std::vector<mcx::ImplicitCurve>();
 
     //capsule:
-	curves.push_back({make_float3(30, 15, 30), make_float3(30, 45, 30), 10});
-	mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
-	    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
-				 make_float3(0, 60, 0), make_float3(60, 60, 0),
-				 make_float3(0, 0, 60), make_float3(60, 0, 60),
-				 make_float3(0, 60, 60),
-				 make_float3(60, 60, 60)}),
-	    tets, spheres, curves);
+    curves.push_back({make_float3(30, 15, 30), make_float3(30, 45, 30), 10});
+    mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
+                                    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
+                                            make_float3(0, 60, 0), make_float3(60, 60, 0),
+                                            make_float3(0, 0, 60), make_float3(60, 0, 60),
+                                            make_float3(0, 60, 60),
+                                            make_float3(60, 60, 60)}),
+                                    tets, spheres, curves);
 
-	return mesh;
+    return mesh;
 }
 
 // benchmark made to match IMMC test
-mcx::TetrahedralMesh immc_sphere_benchmark(){
-	std::vector<uint4> elements = {
-	    make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
-	    make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
-	    make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8),
-	};
+mcx::TetrahedralMesh immc_sphere_benchmark() {
+    std::vector<uint4> elements = {
+        make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
+        make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
+        make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8),
+    };
 
-	std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
+    std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
 
-	uint32_t k = 0;
-	for (uint4 elem : elements) {
-		uint32_t label = 1;
+    uint32_t k = 0;
 
-		tets.push_back(
-		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
-		     label});
+    for (uint4 elem : elements) {
+        uint32_t label = 1;
 
-		k++;
-	}
+        tets.push_back( {
+            make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
+            label});
 
-	// define spheres to simulate
-	std::vector<mcx::ImplicitSphere> spheres =
-	    std::vector<mcx::ImplicitSphere>();
-	spheres.push_back({make_float3(0.5, 0.5, 0.5), 0.1});
-	
-	// define placeholder curves to simulate
-	std::vector<mcx::ImplicitCurve> curves =
-	    std::vector<mcx::ImplicitCurve>();
+        k++;
+    }
 
-	curves.push_back({make_float3(1,1,1), make_float3(1, 1, 1.00001), 0.0001});
-	
-	mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
-	    std::vector<float3>({make_float3(0, 0, 0), make_float3(1, 0, 0),
-				 make_float3(0, 1, 0), make_float3(1, 1, 0),
-				 make_float3(0, 0, 1), make_float3(1, 0, 1),
-				 make_float3(0, 1, 1),
-				 make_float3(1, 1, 1)}),
-	    tets, spheres, curves);
+    // define spheres to simulate
+    std::vector<mcx::ImplicitSphere> spheres =
+        std::vector<mcx::ImplicitSphere>();
+    spheres.push_back({make_float3(0.5, 0.5, 0.5), 0.1});
 
-	return mesh;
+    // define placeholder curves to simulate
+    std::vector<mcx::ImplicitCurve> curves =
+        std::vector<mcx::ImplicitCurve>();
+
+    curves.push_back({make_float3(1, 1, 1), make_float3(1, 1, 1.00001), 0.0001});
+
+    mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
+                                    std::vector<float3>({make_float3(0, 0, 0), make_float3(1, 0, 0),
+                                            make_float3(0, 1, 0), make_float3(1, 1, 0),
+                                            make_float3(0, 0, 1), make_float3(1, 0, 1),
+                                            make_float3(0, 1, 1),
+                                            make_float3(1, 1, 1)}),
+                                    tets, spheres, curves);
+
+    return mesh;
 }
 
 // Test code generating a cube shaped mesh with a sphere in it
 mcx::TetrahedralMesh basic_sphere_test() {
-	std::vector<uint4> elements = {
-	    make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
-	    make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
-	    make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8),
-	};
+    std::vector<uint4> elements = {
+        make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
+        make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
+        make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8),
+    };
 
-	std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
+    std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
 
-	uint32_t k = 0;
-	for (uint4 elem : elements) {
-		uint32_t label = 1;
+    uint32_t k = 0;
 
-		tets.push_back(
-		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
-		     label});
+    for (uint4 elem : elements) {
+        uint32_t label = 1;
 
-		k++;
-	}
+        tets.push_back( {
+            make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
+            label});
 
-	// define spheres to simulate
-	std::vector<mcx::ImplicitSphere> spheres =
-	    std::vector<mcx::ImplicitSphere>();
-	spheres.push_back({make_float3(30, 30, 30), 10});
-	// define placeholder curves to simulate
-	std::vector<mcx::ImplicitCurve> curves =
-	    std::vector<mcx::ImplicitCurve>();
-	curves.push_back({make_float3(55,54,58), make_float3(55,55,58), 0.001});
-	
+        k++;
+    }
+
+    // define spheres to simulate
+    std::vector<mcx::ImplicitSphere> spheres =
+        std::vector<mcx::ImplicitSphere>();
+    spheres.push_back({make_float3(30, 30, 30), 10});
+    // define placeholder curves to simulate
+    std::vector<mcx::ImplicitCurve> curves =
+        std::vector<mcx::ImplicitCurve>();
+    curves.push_back({make_float3(55, 54, 58), make_float3(55, 55, 58), 0.001});
+
     mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
-	    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
-				 make_float3(0, 60, 0), make_float3(60, 60, 0),
-				 make_float3(0, 0, 60), make_float3(60, 0, 60),
-				 make_float3(0, 60, 60),
-				 make_float3(60, 60, 60)}),
-	    tets, spheres, curves);
+                                    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
+                                            make_float3(0, 60, 0), make_float3(60, 60, 0),
+                                            make_float3(0, 0, 60), make_float3(60, 0, 60),
+                                            make_float3(0, 60, 60),
+                                            make_float3(60, 60, 60)}),
+                                    tets, spheres, curves);
 
-	return mesh;
+    return mesh;
 }
 
 // Test many shapes at once:
 mcx::TetrahedralMesh complex_test() {
-	std::vector<uint4> elements = {
-	    make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
-	    make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
-	    make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8),
-	};
+    std::vector<uint4> elements = {
+        make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
+        make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
+        make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8),
+    };
 
-	std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
+    std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
 
-	uint32_t k = 0;
-	for (uint4 elem : elements) {
-		uint32_t label = 1;
+    uint32_t k = 0;
 
-		tets.push_back(
-		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
-		     label});
+    for (uint4 elem : elements) {
+        uint32_t label = 1;
 
-		k++;
-	}
-	// define spheres to simulate
-	std::vector<mcx::ImplicitSphere> spheres =
-	    std::vector<mcx::ImplicitSphere>();
-	spheres.push_back({make_float3(33, 30, 28), 5});
-	spheres.push_back({make_float3(23, 30, 28), 3});
-	// define curves to simulate
-	std::vector<mcx::ImplicitCurve> curves =
-	    std::vector<mcx::ImplicitCurve>();
-	curves.push_back({make_float3(10, 30, 15), make_float3(40, 30, 15), 5});
-	curves.push_back({make_float3(10, 40, 13), make_float3(30, 40, 20), 3});
+        tets.push_back( {
+            make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
+            label});
 
-	mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
-	    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
-				 make_float3(0, 60, 0), make_float3(60, 60, 0),
-				 make_float3(0, 0, 60), make_float3(60, 0, 60),
-				 make_float3(0, 60, 60),
-				 make_float3(60, 60, 60)}),
-	    tets, spheres, curves);
+        k++;
+    }
 
-	return mesh;
+    // define spheres to simulate
+    std::vector<mcx::ImplicitSphere> spheres =
+        std::vector<mcx::ImplicitSphere>();
+    spheres.push_back({make_float3(33, 30, 28), 5});
+    spheres.push_back({make_float3(23, 30, 28), 3});
+    // define curves to simulate
+    std::vector<mcx::ImplicitCurve> curves =
+        std::vector<mcx::ImplicitCurve>();
+    curves.push_back({make_float3(10, 30, 15), make_float3(40, 30, 15), 5});
+    curves.push_back({make_float3(10, 40, 13), make_float3(30, 40, 20), 3});
+
+    mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
+                                    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
+                                            make_float3(0, 60, 0), make_float3(60, 60, 0),
+                                            make_float3(0, 0, 60), make_float3(60, 0, 60),
+                                            make_float3(0, 60, 60),
+                                            make_float3(60, 60, 60)}),
+                                    tets, spheres, curves);
+
+    return mesh;
 }
 
 // Test code generating cube shaped mesh with curve inside it
 mcx::TetrahedralMesh sphere_curve_test() {
-	std::vector<uint4> elements = {
-	    make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
-	    make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
-	    make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8),
-	};
+    std::vector<uint4> elements = {
+        make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
+        make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
+        make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8),
+    };
 
-	std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
+    std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
 
-	uint32_t k = 0;
-	for (uint4 elem : elements) {
-		uint32_t label = 1;
+    uint32_t k = 0;
 
-		tets.push_back(
-		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
-		     label});
+    for (uint4 elem : elements) {
+        uint32_t label = 1;
 
-		k++;
-	}
-	// define spheres to simulate
-	std::vector<mcx::ImplicitSphere> spheres =
-	    std::vector<mcx::ImplicitSphere>();
-	spheres.push_back({make_float3(30, 30, 40), 10});
-	// define curves to simulate
-	std::vector<mcx::ImplicitCurve> curves =
-	    std::vector<mcx::ImplicitCurve>();
-	curves.push_back({make_float3(10, 30, 15), make_float3(40, 30, 15), 10});
+        tets.push_back( {
+            make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
+            label});
 
-	mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
-	    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
-				 make_float3(0, 60, 0), make_float3(60, 60, 0),
-				 make_float3(0, 0, 60), make_float3(60, 0, 60),
-				 make_float3(0, 60, 60),
-				 make_float3(60, 60, 60)}),
-	    tets, spheres, curves);
+        k++;
+    }
 
-	return mesh;
+    // define spheres to simulate
+    std::vector<mcx::ImplicitSphere> spheres =
+        std::vector<mcx::ImplicitSphere>();
+    spheres.push_back({make_float3(30, 30, 40), 10});
+    // define curves to simulate
+    std::vector<mcx::ImplicitCurve> curves =
+        std::vector<mcx::ImplicitCurve>();
+    curves.push_back({make_float3(10, 30, 15), make_float3(40, 30, 15), 10});
+
+    mcx::TetrahedralMesh mesh = mcx::TetrahedralMesh(
+                                    std::vector<float3>({make_float3(0, 0, 0), make_float3(60, 0, 0),
+                                            make_float3(0, 60, 0), make_float3(60, 60, 0),
+                                            make_float3(0, 0, 60), make_float3(60, 0, 60),
+                                            make_float3(0, 60, 60),
+                                            make_float3(60, 60, 60)}),
+                                    tets, spheres, curves);
+
+    return mesh;
 }
 
 mcx::TetrahedralMesh immc_comparison_sphere() {
-	std::vector<uint4> elements = {
-	    make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
-	    make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
-	    make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8)};
+    std::vector<uint4> elements = {
+        make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
+        make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
+        make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8)
+    };
 
-	std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
+    std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
 
-	// setting the material id to the background material
-	uint32_t material_id = 1;
-	for (uint4 elem : elements) {
-		tets.push_back(
-		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
-		     material_id});
-	}
+    // setting the material id to the background material
+    uint32_t material_id = 1;
 
-	std::vector<float3> nodes = {
-	    make_float3(0, 0, 0), make_float3(1, 0, 0), make_float3(0, 1, 0),
-	    make_float3(1, 1, 0), make_float3(0, 0, 1), make_float3(1, 0, 1),
-	    make_float3(0, 1, 1), make_float3(1, 1, 1)};
+    for (uint4 elem : elements) {
+        tets.push_back( {
+            make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
+            material_id});
+    }
 
-	// define spheres to simulate
-	std::vector<mcx::ImplicitSphere> spheres =
-	    std::vector<mcx::ImplicitSphere>();
-	spheres.push_back({make_float3(0.5, 0.5, 0.5), 0.1});
-	// define placeholder curves to simulate
-	std::vector<mcx::ImplicitCurve> curves =
-	    std::vector<mcx::ImplicitCurve>();
+    std::vector<float3> nodes = {
+        make_float3(0, 0, 0), make_float3(1, 0, 0), make_float3(0, 1, 0),
+        make_float3(1, 1, 0), make_float3(0, 0, 1), make_float3(1, 0, 1),
+        make_float3(0, 1, 1), make_float3(1, 1, 1)
+    };
 
-	mcx::TetrahedralMesh mesh =
-	    mcx::TetrahedralMesh(nodes, tets, spheres, curves);
+    // define spheres to simulate
+    std::vector<mcx::ImplicitSphere> spheres =
+        std::vector<mcx::ImplicitSphere>();
+    spheres.push_back({make_float3(0.5, 0.5, 0.5), 0.1});
+    // define placeholder curves to simulate
+    std::vector<mcx::ImplicitCurve> curves =
+        std::vector<mcx::ImplicitCurve>();
 
-	return mesh;
+    mcx::TetrahedralMesh mesh =
+        mcx::TetrahedralMesh(nodes, tets, spheres, curves);
+
+    return mesh;
 }
 
 mcx::TetrahedralMesh immc_comparison_cylinder() {
-	std::vector<uint4> elements = {
-	    make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
-	    make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
-	    make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8)};
+    std::vector<uint4> elements = {
+        make_uint4(1, 2, 8, 4), make_uint4(1, 3, 4, 8),
+        make_uint4(1, 2, 6, 8), make_uint4(1, 5, 8, 6),
+        make_uint4(1, 3, 8, 7), make_uint4(1, 5, 7, 8)
+    };
 
-	std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
+    std::vector<mcx::Tetrahedron> tets = std::vector<mcx::Tetrahedron>();
 
-	// setting the material id to the background material
-	uint32_t material_id = 1;
-	for (uint4 elem : elements) {
-		tets.push_back(
-		    {make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
-		     material_id});
-	}
+    // setting the material id to the background material
+    uint32_t material_id = 1;
 
-	std::vector<float3> nodes = {
-	    make_float3(0, 0, 0), make_float3(1, 0, 0), make_float3(0, 1, 0),
-	    make_float3(1, 1, 0), make_float3(0, 0, 1), make_float3(1, 0, 1),
-	    make_float3(0, 1, 1), make_float3(1, 1, 1)};
+    for (uint4 elem : elements) {
+        tets.push_back( {
+            make_uint4(elem.x - 1, elem.y - 1, elem.z - 1, elem.w - 1),
+            material_id});
+    }
 
-	// define spheres to simulate
-	std::vector<mcx::ImplicitSphere> spheres =
-	    std::vector<mcx::ImplicitSphere>();
-	// define placeholder curves to simulate
-	std::vector<mcx::ImplicitCurve> curves =
-	    std::vector<mcx::ImplicitCurve>();
-	float epsilon = 0.001;
-	curves.push_back({make_float3(1 - epsilon, 0.5, 0.5),
-			  make_float3(epsilon, 0.5, 0.5), 0.1});
+    std::vector<float3> nodes = {
+        make_float3(0, 0, 0), make_float3(1, 0, 0), make_float3(0, 1, 0),
+        make_float3(1, 1, 0), make_float3(0, 0, 1), make_float3(1, 0, 1),
+        make_float3(0, 1, 1), make_float3(1, 1, 1)
+    };
 
-	mcx::TetrahedralMesh mesh =
-	    mcx::TetrahedralMesh(nodes, tets, spheres, curves);
+    // define spheres to simulate
+    std::vector<mcx::ImplicitSphere> spheres =
+        std::vector<mcx::ImplicitSphere>();
+    // define placeholder curves to simulate
+    std::vector<mcx::ImplicitCurve> curves =
+        std::vector<mcx::ImplicitCurve>();
+    float epsilon = 0.001;
+    curves.push_back({make_float3(1 - epsilon, 0.5, 0.5),
+                      make_float3(epsilon, 0.5, 0.5), 0.1});
 
-	return mesh;
+    mcx::TetrahedralMesh mesh =
+        mcx::TetrahedralMesh(nodes, tets, spheres, curves);
+
+    return mesh;
 }
 
 // main function
 int main() {
-	try {
-		mcx::TetrahedralMesh mesh = basic_sphere_test(); // simple test for comparing MMC and optix-iMMC
-	    //mcx::TetrahedralMesh mesh = basic_capsule_test(); // simple test for comparing MMC and optix-iMMC	
-	    Medium sphere_test_media1 = {0.002, 1.0, 0.01, 1.37}; // also same materials for capsule
-        Medium sphere_test_media2 = {0.050, 5.0, 0.9, 1.37};  // also same materials for capsule 
-        
+    try {
+        mcx::TetrahedralMesh mesh = basic_sphere_test(); // simple test for comparing MMC and optix-iMMC
+        //mcx::TetrahedralMesh mesh = basic_capsule_test(); // simple test for comparing MMC and optix-iMMC
+        Medium sphere_test_media1 = {0.002, 1.0, 0.01, 1.37}; // also same materials for capsule
+        Medium sphere_test_media2 = {0.050, 5.0, 0.9, 1.37};  // also same materials for capsule
+
         //mcx::TetrahedralMesh mesh = sphere_curve_test();
 
         Medium row0_media = {0, 0, 1, 1};
         //Medium row1_media = {0.0458, 35.6541, 0.9, 1.37};
         //Medium row2_media = {23.0543, 9.3985, 0.9, 1.37};
 
-		std::vector<Medium> media = {
-            row0_media, sphere_test_media1, sphere_test_media2};
+        std::vector<Medium> media = {
+            row0_media, sphere_test_media1, sphere_test_media2
+        };
 
-		uint3 size = make_uint3(60, 60, 60);
+        uint3 size = make_uint3(60, 60, 60);
 
-		mcx::McxContext ctx = mcx::McxContext();
+        mcx::McxContext ctx = mcx::McxContext();
 
-		// bitshift operation to keep photon counts in factors of 2
-		// 1<<18 is 262144
-		// 1<<28 is 268435456
+        // bitshift operation to keep photon counts in factors of 2
+        // 1<<18 is 262144
+        // 1<<28 is 268435456
 
-		constexpr uint32_t photon_count = 100000000;//1<<26;
-		constexpr float duration = 0.005;
-		constexpr uint32_t timesteps = 10;
+        constexpr uint32_t photon_count = 100000000;//1<<26;
+        constexpr float duration = 0.005;
+        constexpr uint32_t timesteps = 10;
 
-		float3 srcpos = make_float3(30, 30, 0.001);
-		float3 srcdir = make_float3(0, 0, 1);
+        float3 srcpos = make_float3(30, 30, 0.001);
+        float3 srcdir = make_float3(0, 0, 1);
 
-		ctx.simulate(mesh, size, media, photon_count, duration,
-			     timesteps, srcpos, srcdir);
+        ctx.simulate(mesh, size, media, photon_count, duration,
+                     timesteps, srcpos, srcdir);
 
-		std::cout << "\nSimulation complete.\n";
-	} catch (std::runtime_error err) {
-		std::cout << "A runtime error occured.\n";
-		std::cout << err.what();
-	}
+        std::cout << "\nSimulation complete.\n";
+    } catch (std::runtime_error err) {
+        std::cout << "A runtime error occured.\n";
+        std::cout << err.what();
+    }
 }

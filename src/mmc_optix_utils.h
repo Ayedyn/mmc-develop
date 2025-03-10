@@ -9,22 +9,19 @@
 #include <vector>
 
 /*! SBT record for a raygen program */
-struct __align__( OPTIX_SBT_RECORD_ALIGNMENT ) RaygenRecord
-{
+struct __align__( OPTIX_SBT_RECORD_ALIGNMENT ) RaygenRecord {
     __align__( OPTIX_SBT_RECORD_ALIGNMENT ) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
-    void *data;
+    void* data;
 };
 
 /*! SBT record for a miss program */
-struct __align__( OPTIX_SBT_RECORD_ALIGNMENT ) MissRecord
-{
+struct __align__( OPTIX_SBT_RECORD_ALIGNMENT ) MissRecord {
     __align__( OPTIX_SBT_RECORD_ALIGNMENT ) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
-    void *data;
+    void* data;
 };
 
 /*! SBT record for a hitgroup program */
-struct __align__( OPTIX_SBT_RECORD_ALIGNMENT ) HitgroupRecord
-{
+struct __align__( OPTIX_SBT_RECORD_ALIGNMENT ) HitgroupRecord {
     __align__( OPTIX_SBT_RECORD_ALIGNMENT ) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
     TriangleMeshSBTData data;
 };
@@ -79,7 +76,7 @@ struct OptixParams {
     osc::CUDABuffer seedBuffer;
 
     /*! buffer for output storage */
-    float *outputHostBuffer;
+    float* outputHostBuffer;
     unsigned int outputBufferSize;
     osc::CUDABuffer outputBuffer;
 
@@ -99,7 +96,7 @@ extern "C" {
 #endif
 
 void optix_run_simulation(mcconfig* cfg, tetmesh* mesh, raytracer* tracer,
-    GPUInfo* gpu, void (*progressfun)(float, void*), void* handle);
+                          GPUInfo* gpu, void (*progressfun)(float, void*), void* handle);
 
 void initOptix();
 void createContext(mcconfig* cfg, OptixParams* optixcfg);
@@ -107,13 +104,13 @@ void createModule(mcconfig* cfg, OptixParams* optixcfg, std::string ptxcode);
 void createRaygenPrograms(OptixParams* optixcfg);
 void createMissPrograms(OptixParams* optixcfg);
 void createHitgroupPrograms(OptixParams* optixcfg);
-void prepareSurfMesh(tetmesh *tmesh, surfmesh *smesh);
-OptixTraversableHandle buildAccel(tetmesh *tmesh, surfmesh* smesh, OptixParams* optixcfg,
-    unsigned int primitiveoffset);
+void prepareSurfMesh(tetmesh* tmesh, surfmesh* smesh);
+OptixTraversableHandle buildAccel(tetmesh* tmesh, surfmesh* smesh, OptixParams* optixcfg,
+                                  unsigned int primitiveoffset);
 void createPipeline(OptixParams* optixcfg);
 void buildSBT(tetmesh* tmesh, surfmesh* smesh, OptixParams* optixcfg);
 void prepLaunchParams(mcconfig* cfg, tetmesh* mesh, GPUInfo* gpu,
-    OptixParams *optixcfg);
+                      OptixParams* optixcfg);
 void clearOptixParams(OptixParams* optixcfg);
 
 #ifdef __cplusplus

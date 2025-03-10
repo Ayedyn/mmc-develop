@@ -9,48 +9,47 @@
 #include "tetrahedral_mesh.h"
 
 namespace mcx {
-	class McxContext {
-	private:
-		
-		OptixDeviceContext optixContext;
-		OptixPipeline devicePipeline;
-        OptixShaderBindingTable SBT;
+class McxContext {
+  private:
 
-		McxContext(const McxContext&) = default;
-		McxContext& operator= (const McxContext&) = default;
+    OptixDeviceContext optixContext;
+    OptixPipeline devicePipeline;
+    OptixShaderBindingTable SBT;
 
-		void onMessageReceived(uint32_t level, const char* tag, const char* message);
+    McxContext(const McxContext&) = default;
+    McxContext& operator= (const McxContext&) = default;
 
-		static void messageHandler(uint32_t level, const char* tag, const char* message, void* data);
+    void onMessageReceived(uint32_t level, const char* tag, const char* message);
 
-        template<typename T>
-        struct SbtRecord
-        {
-            __align__(OPTIX_SBT_RECORD_ALIGNMENT)
-            char header[OPTIX_SBT_RECORD_HEADER_SIZE];
-            T data;
+    static void messageHandler(uint32_t level, const char* tag, const char* message, void* data);
 
-            SbtRecord(T t);
-        };
-
-
-	public:
-		McxContext();
-		McxContext(McxContext&& src);
-
-		void simulate(TetrahedralMesh& mesh, uint3 size,
-                std::vector<Medium> media, uint32_t pcount,
-                float duration, uint32_t timeSteps,
-                float3 pos, float3 dir);
-
-		~McxContext();
-	};
-
-    // sets up an SbtRecord
     template<typename T>
-    McxContext::SbtRecord<T>::SbtRecord(T t) {
-        this->data = t;
-    }
+    struct SbtRecord {
+        __align__(OPTIX_SBT_RECORD_ALIGNMENT)
+        char header[OPTIX_SBT_RECORD_HEADER_SIZE];
+        T data;
+
+        SbtRecord(T t);
+    };
+
+
+  public:
+    McxContext();
+    McxContext(McxContext&& src);
+
+    void simulate(TetrahedralMesh& mesh, uint3 size,
+                  std::vector<Medium> media, uint32_t pcount,
+                  float duration, uint32_t timeSteps,
+                  float3 pos, float3 dir);
+
+    ~McxContext();
+};
+
+// sets up an SbtRecord
+template<typename T>
+McxContext::SbtRecord<T>::SbtRecord(T t) {
+    this->data = t;
+}
 
 
 

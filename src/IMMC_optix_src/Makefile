@@ -132,22 +132,21 @@ clean:
 pretty:
 	astyle \
 	    --style=attach \
-            --indent=spaces=4 \
-            --indent-modifiers \
-            --indent=spaces=4 \
-            --indent-modifiers \
-            --indent-switches \
-            --indent-preproc-block \
-            --indent-preproc-define \
-            --indent-col1-comments \
-            --pad-oper \
-            --pad-header \
-            --align-pointer=type \
-            --align-reference=type \
-            --add-brackets \
-            --convert-tabs \
-            --close-templates \
-            --lineend=linux \
-            --preserve-date \
-            --suffix=none \
-            --formatted \
+	    --indent=spaces=4 \
+	    --indent-modifiers \
+	    --indent-switches \
+	    --indent-preproc-block \
+	    --indent-preproc-define \
+	    --indent-col1-comments \
+	    --pad-oper \
+	    --pad-header \
+	    --align-pointer=type \
+	    --align-reference=type \
+	    --add-brackets \
+	    --convert-tabs \
+	    --lineend=linux \
+	    --preserve-date \
+	    --suffix=none \
+	    --formatted \
+	    --break-blocks \
+	   "*.c" "*.h" "*.cpp" "*.cu"
