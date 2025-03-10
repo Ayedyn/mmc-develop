@@ -3,8 +3,9 @@
 #include <stdint.h>
 #include <optix.h>
 
+#include "CUDABuffer.h"
+#include "optix7.h"
 #include "mmc_optix_launchparam.h"
-//#include "shader_pipeline.h"
 #include "tetrahedral_mesh.h"
 
 namespace mcx {

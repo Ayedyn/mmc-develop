@@ -1,6 +1,6 @@
 #include "mcx_context.h"
 #include <cuda_runtime.h>
-#include "CUDABuffer.h"
+//#include "CUDABuffer.h"
 #include <optix.h>
 #include <optix_function_table_definition.h>
 #include <optix_stubs.h>
@@ -15,10 +15,8 @@
 #include <cstring>
 #include <cuda_runtime.h>
 #include "incbin.h"
-//#include "shader_pipeline.h"
 #include "tetrahedral_mesh.h"
-#include "util.h"
-#include "device_buffer.h"
+//#include "util.h"
 #include "mmc_optix_launchparam.h"
 #include "mmc_utils.h"
 #include "mmc_mesh.h"
@@ -77,7 +75,6 @@ static void compressAndBuild(const OptixDeviceContext ctx, const OptixAccelBuild
 
 	size_t compactSize;
     compactedSizeBuffer.download(&compactSize, 1);
-    // need to read in compactSize from emitProperty
 
 	if (compactSize < sizes.outputSizeInBytes) {
 	    osc::CUDABuffer buffer;
@@ -187,7 +184,7 @@ static void createCurveAccelStructure(
 #endif
 }
 
-// Creates a sphere acceleration structure as a DeviceByteBuffer, adds it to the
+// Creates a sphere acceleration structure, adds it to the
 // OptixTraversableHandle which is passed by reference this AS contains a series
 // of spheres with the same material and varying radii & center points
 static void createSphereAccelerationStructure(
@@ -224,7 +221,7 @@ static void createSphereAccelerationStructure(
 // and save on memory by storing them as instances with different transforms
 // (translation, rotation, etc)
 // also allows the combining of spheres and surfaces onto a single acceleration structure
-static DeviceByteBuffer createInstanceAccelerationStructure(
+static void createInstanceAccelerationStructure(
     OptixDeviceContext ctx, OptixTraversableHandle& handle,
     std::vector<OptixTraversableHandle> combinedHandles) {
 	std::vector<OptixInstance> instances = std::vector<OptixInstance>();
@@ -242,14 +239,14 @@ static DeviceByteBuffer createInstanceAccelerationStructure(
 		i++;
 	}
 
-	DeviceBuffer<OptixInstance> instanceBuffer =
-	    DeviceBuffer<OptixInstance>(instances.data(), instances.size());
+    osc::CUDABuffer instanceBuffer;
+    instanceBuffer.alloc_and_upload(instances); 
 
 	OptixBuildInput buildInput = {};
 	buildInput.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
-	buildInput.instanceArray.instances = instanceBuffer.handle();
+	buildInput.instanceArray.instances = instanceBuffer.d_pointer();
 	buildInput.instanceArray.instanceStride = 0;
-	buildInput.instanceArray.numInstances = instanceBuffer.count();
+	buildInput.instanceArray.numInstances = instances.size();
 
 	OptixAccelBuildOptions accelerationOptions = {};
 	accelerationOptions.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
@@ -354,7 +351,7 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 		combinedHandles.push_back(spheresHandle);
 	}
 	combinedHandles.push_back(handle);
-	    createInstanceAccelerationStructure(ctx, handle, combinedHandles);
+	createInstanceAccelerationStructure(ctx, handle, combinedHandles);
 	return handle;
 }
 
@@ -594,7 +591,7 @@ McxContext::McxContext() {
 
     // ensure any previous device resources are freed
 
-    CUDA_CHECK(cudaFree(nullptr));
+    cudaFree(nullptr);
 
 	OPTIX_CHECK(optixInit());
 
@@ -614,7 +611,7 @@ McxContext::McxContext() {
 	OPTIX_CHECK(
 	    optixDeviceContextCreate(nullptr, &opts, &this->optixContext));
 
-// TODO: MONOLITH THIS CODE:
+// TODO: MOVE THIS SBT CODE TO SEPARATE FUNCTION:
 
 	std::string ptx = std::string(mmcShaderPtx);
 
@@ -660,7 +657,8 @@ McxContext::McxContext() {
         SbtRecord<void*> rrec = SbtRecord<void*>(nullptr);
         OPTIX_CHECK(optixSbtRecordPackHeader(raygen_group, &rrec));
         // sbt record data is empty for raygen
-        DeviceBuffer <SbtRecord<void*>> raygenRecord = rrec;
+        osc::CUDABuffer raygenRecord; 
+        raygenRecord.alloc_and_upload(&rrec, 1);
 
         // prepare miss program
         OptixProgramGroup miss_group = OptixProgramGroup();
@@ -676,7 +674,8 @@ McxContext::McxContext() {
         // pack miss sbt header
         SbtRecord<void*> mrec = SbtRecord<void*>(nullptr);
         OPTIX_CHECK(optixSbtRecordPackHeader(miss_group, &mrec));
-        DeviceBuffer <SbtRecord<void*>> missRecord = mrec;
+        osc::CUDABuffer missRecord;
+        missRecord.alloc_and_upload(&mrec, 1);
 
         // prepare hit programs for capsule, sphere, triangle
         //capsule
@@ -748,23 +747,21 @@ McxContext::McxContext() {
                         hitgroupProgramGroups[i],
                         &grecs[i]));
         }
-        DeviceBuffer<SbtRecord<void*>> hitgroupRecords = 
-            DeviceBuffer<SbtRecord<void*>>(grecs.data(), grecs.size());
+        osc::CUDABuffer hitgroupRecords;
+        hitgroupRecords.alloc_and_upload(grecs);
 
         // create SBT from records
         OptixShaderBindingTable sbt = {};
 
-        sbt.raygenRecord = raygenRecord.handle();
-        sbt.missRecordBase = missRecord.handle();
+        sbt.raygenRecord = raygenRecord.d_pointer();
+        sbt.missRecordBase = missRecord.d_pointer();
         sbt.missRecordStrideInBytes = sizeof(mrec);
         sbt.missRecordCount = 1;
-        sbt.hitgroupRecordBase = hitgroupRecords.handle();
+        sbt.hitgroupRecordBase = hitgroupRecords.d_pointer();
         sbt.hitgroupRecordStrideInBytes = sizeof(SbtRecord<void*>);
         sbt.hitgroupRecordCount = grecs.size();
 
         this->SBT = sbt;
-
-// END OF CODE TO BE MONOLITHED
 }
 
 // move constructor
@@ -822,10 +819,11 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 #endif	
 
 	// triangleData is a vector of surface boundaries
-	DeviceBuffer<PrimitiveSurfaceData> primitive_data = DeviceBuffer<PrimitiveSurfaceData>(
-	    triangleData.data(), triangleData.size());
-	DeviceBuffer<ImplicitCurve> curves =
-	    DeviceBuffer<ImplicitCurve>(curveData.data(), curveData.size());
+    osc::CUDABuffer primitive_data;
+    primitive_data.alloc_and_upload(triangleData);    
+    
+    osc::CUDABuffer curves;
+    curves.alloc_and_upload(curveData);
 
     // get hardware info
     cudaDeviceProp prop;
@@ -839,8 +837,6 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
     	// Calculate the total number of threads
     	unsigned int launchWidth = (numSMs-1) * maxThreadsPerSM;
 
-// TODO: get rid of thjis temp singlethreading:
-//        launchWidth = 1;
 	// set number of threads and photons per thread:
 	unsigned int threadphoton = pcount / launchWidth;	
 	unsigned int oddphoton = pcount - threadphoton * launchWidth;
@@ -917,9 +913,9 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
         // uint3 dimensions of simulation
 	    gcfg.dataSize = size; 
         // CUdeviceptr for vector of surface boundaries
-        gcfg.surfaceBoundaries = primitive_data.handle(); 
+        gcfg.surfaceBoundaries = primitive_data.d_pointer(); 
         // CUdeviceptr for vector of capsules 
-        gcfg.curveData = curves.handle(); 
+        gcfg.curveData = curves.d_pointer(); 
         // CUdeviceptr for flattened 4D output array
         gcfg.outputbuffer = outputBuffer.d_pointer();
         // float for duration in milliseconds 
@@ -949,7 +945,8 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
         // unsigned int for remainder after dividing between threads 
         gcfg.oddphoton = oddphoton;
 
-	DeviceBuffer<MMCParam> paraBuffer(gcfg);
+    osc::CUDABuffer paraBuffer;
+    paraBuffer.alloc_and_upload(&gcfg, 1);
 
 	std::cout << "Beginning simulation." << std::endl;
 	std::chrono::steady_clock::time_point begin =
@@ -962,8 +959,8 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
 	// a GPU perspective this is done with a linear set of kernels of length
 	// photoncount.
 	OPTIX_CHECK(optixLaunch(this->devicePipeline, nullptr, \
-			paraBuffer.handle(),
-				sizeof(gcfg), &this->SBT, launchWidth,
+			paraBuffer.d_pointer(),
+				paraBuffer.sizeInBytes, &this->SBT, launchWidth,
 				1, 1));
 
     printf("\nsim completed successfully");
@@ -1027,7 +1024,6 @@ void McxContext::messageHandler(uint32_t level, const char* tag,
 }
 
 McxContext::~McxContext() {
-	//this->deviceSbt = ShaderBindingTable<void*, void*, void*>();
      
     this->devicePipeline = nullptr;
 	optixDeviceContextDestroy(this->optixContext);

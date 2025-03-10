@@ -7,7 +7,6 @@
 #include <iostream>
 #include <stdexcept>
 
-#include "device_buffer.h"
 #include "mcx_context.h"
 #include "mmc_optix_launchparam.h"
 
