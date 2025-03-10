@@ -428,8 +428,8 @@ mcx::TetrahedralMesh immc_comparison_cylinder() {
 // main function
 int main() {
 	try {
-		//mcx::TetrahedralMesh mesh = basic_sphere_test(); // simple test for comparing MMC and optix-iMMC
-	    mcx::TetrahedralMesh mesh = basic_capsule_test(); // simple test for comparing MMC and optix-iMMC	
+		mcx::TetrahedralMesh mesh = basic_sphere_test(); // simple test for comparing MMC and optix-iMMC
+	    //mcx::TetrahedralMesh mesh = basic_capsule_test(); // simple test for comparing MMC and optix-iMMC	
 	    Medium sphere_test_media1 = {0.002, 1.0, 0.01, 1.37}; // also same materials for capsule
         Medium sphere_test_media2 = {0.050, 5.0, 0.9, 1.37};  // also same materials for capsule 
         

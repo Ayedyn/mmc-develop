@@ -48,68 +48,75 @@ unsigned int storeFloatAsuint(float myFloat) {
     return storedUint;  // Return the stored float
 }
 
-static DeviceByteBuffer createAccelerationStructure(
+// Compresses an acceleration structure, checks if it's smaller size, and returns the handle of the smaller build if so
+static void compressAndBuild(const OptixDeviceContext ctx, const OptixAccelBuildOptions accel_options, const OptixBuildInput build_input, OptixTraversableHandle& handle) {
+	OptixAccelBufferSizes sizes;
+	OPTIX_CHECK(optixAccelComputeMemoryUsage(
+                ctx,
+                &accel_options,
+				&build_input, 
+                1, // num_build_inputs
+                &sizes));
+
+    osc::CUDABuffer tempBuffer;
+    tempBuffer.alloc(sizes.tempSizeInBytes);    
+    
+    osc::CUDABuffer outputBuffer;
+	outputBuffer.alloc(sizes.outputSizeInBytes);
+    osc::CUDABuffer compactedSizeBuffer;
+    compactedSizeBuffer.alloc(sizeof(uint64_t));
+
+	OptixAccelEmitDesc emitProperty = {};
+	emitProperty.type = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE;
+	emitProperty.result = compactedSizeBuffer.d_pointer();
+
+	OPTIX_CHECK(optixAccelBuild(
+	    ctx, nullptr, &accel_options, &build_input, 1,
+	    tempBuffer.d_pointer(), sizes.tempSizeInBytes, outputBuffer.d_pointer(),
+	    sizes.outputSizeInBytes, &handle, &emitProperty, 1));
+
+	size_t compactSize;
+    compactedSizeBuffer.download(&compactSize, 1);
+    // need to read in compactSize from emitProperty
+
+	if (compactSize < sizes.outputSizeInBytes) {
+	    osc::CUDABuffer buffer;
+        buffer.alloc(compactSize);    
+		OPTIX_CHECK(optixAccelCompact(ctx, nullptr, handle,
+					      buffer.d_pointer(), compactSize,
+					      &handle));
+    } 
+}
+
+static void createAccelerationStructure(
     OptixDeviceContext ctx, OptixTraversableHandle& handle, int primitiveOffset,
-    DeviceBuffer<float3>& vertexBuffer, DeviceBuffer<uint3>& indexBuffer,
-    DeviceBuffer<uint32_t>& sbtIndexOffsets) {
-	uint32_t triangleInputFlags = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
+    osc::CUDABuffer& vertexBuffer, int vertexCount, osc::CUDABuffer& indexBuffer, int indexCount) {
+	
+    uint32_t triangleInputFlags = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
 	OptixBuildInput buildInput = {};
 	buildInput.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
 	buildInput.triangleArray.vertexFormat = OPTIX_VERTEX_FORMAT_FLOAT3;
 	buildInput.triangleArray.vertexStrideInBytes = sizeof(float3);
-	buildInput.triangleArray.numVertices = vertexBuffer.count();
-	buildInput.triangleArray.vertexBuffers = &vertexBuffer.handle();
+	buildInput.triangleArray.numVertices = vertexCount;
+    CUdeviceptr vertexpointer = vertexBuffer.d_pointer();	
+    buildInput.triangleArray.vertexBuffers = &vertexpointer;
 	buildInput.triangleArray.indexFormat =
 	    OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
 	buildInput.triangleArray.indexStrideInBytes = 0;
-	buildInput.triangleArray.numIndexTriplets = indexBuffer.count();
-	buildInput.triangleArray.indexBuffer = indexBuffer.handle();
+	buildInput.triangleArray.numIndexTriplets = indexCount;
+	buildInput.triangleArray.indexBuffer = indexBuffer.d_pointer();
 	buildInput.triangleArray.flags = &triangleInputFlags;
 	buildInput.triangleArray.numSbtRecords = 1;
-	//buildInput.triangleArray.sbtIndexOffsetBuffer =
-	//    sbtIndexOffsets.handle();
-	//buildInput.triangleArray.sbtIndexOffsetSizeInBytes = sizeof(int32_t);
-	//buildInput.triangleArray.sbtIndexOffsetStrideInBytes = 0;
 	buildInput.triangleArray.primitiveIndexOffset = primitiveOffset;
 
 	OptixAccelBuildOptions accelerationOptions = {};
 	accelerationOptions.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
 	accelerationOptions.operation = OPTIX_BUILD_OPERATION_BUILD;
 
-	OptixAccelBufferSizes sizes;
-	OPTIX_CHECK(optixAccelComputeMemoryUsage(ctx, &accelerationOptions,
-						 &buildInput, 1, &sizes));
-
-	DeviceByteBuffer tempBuffer = DeviceByteBuffer(sizes.tempSizeInBytes);
-	DeviceByteBuffer outputBuffer =
-	    DeviceByteBuffer(sizes.outputSizeInBytes);
-	DeviceBuffer<size_t> compactedSize = DeviceBuffer<size_t>(1);
-
-	OptixAccelEmitDesc emitProperty = {};
-	emitProperty.type = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE;
-	emitProperty.result = compactedSize.handle();
-
-	OPTIX_CHECK(optixAccelBuild(
-	    ctx, nullptr, &accelerationOptions, &buildInput, 1,
-	    tempBuffer.handle(), sizes.tempSizeInBytes, outputBuffer.handle(),
-	    sizes.outputSizeInBytes, &handle, &emitProperty, 1));
-
+    compressAndBuild(ctx, accelerationOptions, buildInput, handle);
 #ifndef NDEBUG
 	printf("\nBuilt an optix acceleration structure of type: triangles");
 #endif
-
-	size_t compactSize;
-	compactedSize.read(&compactSize);
-
-	if (compactSize < sizes.outputSizeInBytes) {
-		DeviceByteBuffer buffer = DeviceByteBuffer(compactSize);
-		OPTIX_CHECK(optixAccelCompact(ctx, nullptr, handle,
-					      buffer.handle(), compactSize,
-					      &handle));
-		return buffer;
-	} else {
-		return outputBuffer;
-	}
 }
 
 // Builds a an acceleration structure of linear (cylindrical with spherical
@@ -118,11 +125,9 @@ static DeviceByteBuffer createAccelerationStructure(
 // curve segment widthBuffer represents a list of the swept radius between each
 // vertex Takes returns the AS as a devicebytebuffer and adds the AS to the
 // traversable handle passed by reference
-static DeviceByteBuffer createCurveAccelStructure(
+static void createCurveAccelStructure(
     OptixDeviceContext ctx, OptixTraversableHandle& handle, int primitiveOffset,
-    std::vector<float3>& vertexVector, std::vector<float>& widthVector,
-    DeviceBuffer<unsigned int>& indexBuffer,
-    DeviceBuffer<uint32_t>& sbtIndexOffsets) {
+    std::vector<float3>& vertexVector, std::vector<float>& widthVector) {
 	OptixBuildInput buildInput = {};
 	buildInput.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
 
@@ -159,18 +164,15 @@ static DeviceByteBuffer createCurveAccelStructure(
 		aabb.push_back(temp_aabb);
 	}
 
-	DeviceBuffer<OptixAabb> aabbBuffer =
-	    DeviceBuffer<OptixAabb>(aabb.data(), aabb.size());
+    osc::CUDABuffer aabbBuffer;
+    aabbBuffer.alloc_and_upload(aabb);
+    CUdeviceptr aabbBuffer_pointer = aabbBuffer.d_pointer();
 
-	buildInput.customPrimitiveArray.aabbBuffers = &aabbBuffer.handle();
+	buildInput.customPrimitiveArray.aabbBuffers = &aabbBuffer_pointer;
 
 	uint32_t aabbInputFlags = OPTIX_GEOMETRY_FLAG_NONE;
 	buildInput.customPrimitiveArray.flags = &aabbInputFlags;
 	buildInput.customPrimitiveArray.numSbtRecords = 1;
-	//buildInput.customPrimitiveArray.sbtIndexOffsetBuffer =
-	//    sbtIndexOffsets.handle();
-	//buildInput.customPrimitiveArray.sbtIndexOffsetSizeInBytes =
-	//    sizeof(int32_t);
 	buildInput.customPrimitiveArray.primitiveIndexOffset = primitiveOffset;
 
 	// compact and build the acceleration structure
@@ -179,59 +181,29 @@ static DeviceByteBuffer createCurveAccelStructure(
 	accelerationOptions.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
 	accelerationOptions.operation = OPTIX_BUILD_OPERATION_BUILD;
 
-	OptixAccelBufferSizes sizes;
-	OPTIX_CHECK(optixAccelComputeMemoryUsage(ctx, &accelerationOptions,
-						 &buildInput, 1, &sizes));
-
-	DeviceByteBuffer tempBuffer = DeviceByteBuffer(sizes.tempSizeInBytes);
-	DeviceByteBuffer outputBuffer =
-	    DeviceByteBuffer(sizes.outputSizeInBytes);
-	DeviceBuffer<size_t> compactedSize = DeviceBuffer<size_t>(1);
-
-	OptixAccelEmitDesc emitProperty = {};
-	emitProperty.type = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE;
-	emitProperty.result = compactedSize.handle();
-
-	OPTIX_CHECK(optixAccelBuild(
-	    ctx, nullptr, &accelerationOptions, &buildInput, 1,
-	    tempBuffer.handle(), sizes.tempSizeInBytes, outputBuffer.handle(),
-	    sizes.outputSizeInBytes, &handle, &emitProperty, 1));
-
-
+    compressAndBuild(ctx, accelerationOptions, buildInput, handle);
 #ifndef NDEBUG
 	printf("\nBuilt an optix acceleration structure of type: custom capsule");
 #endif
-
-
-	size_t compactSize;
-	compactedSize.read(&compactSize);
-
-	if (compactSize < sizes.outputSizeInBytes) {
-		DeviceByteBuffer buffer = DeviceByteBuffer(compactSize);
-		OPTIX_CHECK(optixAccelCompact(ctx, nullptr, handle,
-					      buffer.handle(), compactSize,
-					      &handle));
-		return buffer;
-	} else {
-		return outputBuffer;
-	}
 }
 
 // Creates a sphere acceleration structure as a DeviceByteBuffer, adds it to the
 // OptixTraversableHandle which is passed by reference this AS contains a series
 // of spheres with the same material and varying radii & center points
-static DeviceByteBuffer createSphereAccelerationStructure(
+static void createSphereAccelerationStructure(
     OptixDeviceContext ctx, OptixTraversableHandle& handle, int primitiveOffset,
-    DeviceBuffer<float3>& centerBuffer, DeviceBuffer<float>& radiusBuffer,
-    DeviceBuffer<uint32_t>& sbtIndexOffsets) {
+    osc::CUDABuffer& centerBuffer, int centercount, osc::CUDABuffer& radiusBuffer) {
 	uint32_t sphere_input_flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
+
+    CUdeviceptr centerBuffer_pointer = centerBuffer.d_pointer();
+    CUdeviceptr radiusBuffer_pointer = radiusBuffer.d_pointer();
 
 	OptixBuildInput buildInput = {};
 	buildInput.type = OPTIX_BUILD_INPUT_TYPE_SPHERES;
 	buildInput.sphereArray.vertexStrideInBytes = sizeof(float3);
-	buildInput.sphereArray.vertexBuffers = &centerBuffer.handle();
-	buildInput.sphereArray.numVertices = centerBuffer.count();
-	buildInput.sphereArray.radiusBuffers = &radiusBuffer.handle();
+	buildInput.sphereArray.vertexBuffers = &centerBuffer_pointer;
+	buildInput.sphereArray.numVertices = centercount;
+	buildInput.sphereArray.radiusBuffers = &radiusBuffer_pointer;
 	buildInput.sphereArray.radiusStrideInBytes = 0;
 	buildInput.sphereArray.flags = sphere_input_flags;
 	buildInput.sphereArray.numSbtRecords = 1;
@@ -242,40 +214,10 @@ static DeviceByteBuffer createSphereAccelerationStructure(
 	accelerationOptions.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
 	accelerationOptions.operation = OPTIX_BUILD_OPERATION_BUILD;
 
-	OptixAccelBufferSizes sizes;
-	OPTIX_CHECK(optixAccelComputeMemoryUsage(ctx, &accelerationOptions,
-						 &buildInput, 1, &sizes));
-
-	DeviceByteBuffer tempBuffer = DeviceByteBuffer(sizes.tempSizeInBytes);
-	DeviceByteBuffer outputBuffer =
-	    DeviceByteBuffer(sizes.outputSizeInBytes);
-	DeviceBuffer<size_t> compactedSize = DeviceBuffer<size_t>(1);
-
-	OptixAccelEmitDesc emitProperty = {};
-	emitProperty.type = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE;
-	emitProperty.result = compactedSize.handle();
-
-	OPTIX_CHECK(optixAccelBuild(
-	    ctx, nullptr, &accelerationOptions, &buildInput, 1,
-	    tempBuffer.handle(), sizes.tempSizeInBytes, outputBuffer.handle(),
-	    sizes.outputSizeInBytes, &handle, &emitProperty, 1));
-
+    compressAndBuild(ctx, accelerationOptions, buildInput, handle);
 #ifndef NDEBUG
 	printf("\nBuilt an optix acceleration structure of type: sphere");
 #endif
-
-	size_t compactSize;
-	compactedSize.read(&compactSize);
-
-	if (compactSize < sizes.outputSizeInBytes) {
-		DeviceByteBuffer buffer = DeviceByteBuffer(compactSize);
-		OPTIX_CHECK(optixAccelCompact(ctx, nullptr, handle,
-					      buffer.handle(), compactSize,
-					      &handle));
-		return buffer;
-	}
-
-    return outputBuffer;
 }
 
 // instance acceleration structure is created to help store triangular meshes
@@ -313,40 +255,10 @@ static DeviceByteBuffer createInstanceAccelerationStructure(
 	accelerationOptions.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
 	accelerationOptions.operation = OPTIX_BUILD_OPERATION_BUILD;
 
-	OptixAccelBufferSizes sizes;
-	OPTIX_CHECK(optixAccelComputeMemoryUsage(ctx, &accelerationOptions,
-						 &buildInput, 1, &sizes));
-
-	DeviceByteBuffer tempBuffer = DeviceByteBuffer(sizes.tempSizeInBytes);
-	DeviceByteBuffer outputBuffer =
-	    DeviceByteBuffer(sizes.outputSizeInBytes);
-	DeviceBuffer<size_t> compactedSize = DeviceBuffer<size_t>(1);
-
-	OptixAccelEmitDesc emitProperty = {};
-	emitProperty.type = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE;
-	emitProperty.result = compactedSize.handle();
-
-	OPTIX_CHECK(optixAccelBuild(
-	    ctx, nullptr, &accelerationOptions, &buildInput, 1,
-	    tempBuffer.handle(), sizes.tempSizeInBytes, outputBuffer.handle(),
-	    sizes.outputSizeInBytes, &handle, &emitProperty, 1));
-
+    compressAndBuild(ctx, accelerationOptions, buildInput, handle);
 #ifndef NDEBUG
 	printf("\nBuilt an optix acceleration structure of type: instances");
 #endif
-
-	size_t compactSize;
-	compactedSize.read(&compactSize);
-
-	if (compactSize < sizes.outputSizeInBytes) {
-		DeviceByteBuffer buffer = DeviceByteBuffer(compactSize);
-		OPTIX_CHECK(optixAccelCompact(ctx, nullptr, handle,
-					      buffer.handle(), compactSize,
-					      &handle));
-		return buffer;
-	} else {
-		return outputBuffer;
-	}
 }
 
 // adds curve primitives to a triangular manifold that it interects, onto a
@@ -354,8 +266,8 @@ static DeviceByteBuffer createInstanceAccelerationStructure(
 // result. tetrahedral mesh needs to be modified with curve objects that have
 // vertex1, vertex2, and widths
 static OptixTraversableHandle generateManifoldWithLinearCurves(
-    OptixDeviceContext ctx, DeviceBuffer<float3>& triangleVertexBuffer,
-    int& primitiveCount, std::vector<DeviceByteBuffer>& result,
+    OptixDeviceContext ctx, osc::CUDABuffer& triangleVertexBuffer, int triangleVertexCount,
+    int& primitiveCount,
     TetrahedralManifold& manifold, float curveWidthAdjustment,
     float sphereRadiusAdjustment) {
 
@@ -364,8 +276,6 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 	// create the curve acceleration structures
 	std::vector<float3> curveVertices = std::vector<float3>();
 	std::vector<float> curveWidths = std::vector<float>();
-	std::vector<unsigned int> curveIndices = std::vector<unsigned int>();
-	sbt = std::vector<uint32_t>();
 
 	// Curve vertex coordinates and widths (radius) are inside of
 	// tetrahedral manifold
@@ -375,28 +285,17 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 		curveVertices.push_back(curve.vertex1);
 		curveVertices.push_back(curve.vertex2);
 		curveWidths.push_back(curve.width - curveWidthAdjustment);
-		sbt.push_back(0);
 		// the index should be the current count of curves*2
 		// (vertices per curve)+1
-		curveIndices.push_back((curvecount * vertices_per_curve) + 1);
 		curvecount = curvecount + 1;
 	}
-
-	// specifies starting indices of the vertices of a given curve,
-	// which are read in pairs to create linear curves
-	DeviceBuffer<unsigned int> curveIndexBuffer =
-	    DeviceBuffer<unsigned int>(curveIndices.data(),
-				       curveIndices.size());
-
-	DeviceBuffer<uint32_t> sbtBuffer =
-	    DeviceBuffer<uint32_t>(sbt.data(), sbt.size());
 
 	OptixTraversableHandle curvesHandle;
 
 	if (manifold.curves.size() > 0) {
-		result.push_back(createCurveAccelStructure(
+		createCurveAccelStructure(
 		    ctx, curvesHandle, primitiveCount, curveVertices,
-		    curveWidths, curveIndexBuffer, sbtBuffer));
+		    curveWidths);
 		primitiveCount += manifold.curves.size();
 	}
 
@@ -412,19 +311,19 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 		sbt.push_back(0);
 	}
 
-	DeviceBuffer<float3> centerBuffer =
-	    DeviceBuffer<float3>(sphereCenters.data(), sphereCenters.size());
-	DeviceBuffer<float> radiiBuffer =
-	    DeviceBuffer<float>(sphereRadii.data(), sphereRadii.size());
-	sbtBuffer = DeviceBuffer<uint32_t>(sbt.data(), sbt.size());
+    osc::CUDABuffer centerBuffer;
+	centerBuffer.alloc_and_upload(sphereCenters);
+    int centerCount = sphereCenters.size();
+    osc::CUDABuffer radiiBuffer;
+	radiiBuffer.alloc_and_upload(sphereRadii);
 
 	OptixTraversableHandle spheresHandle;
 
 	if (manifold.spheres.size() > 0) {
 		// this creates the acceleration structures for spheres
-		result.push_back(createSphereAccelerationStructure(
-		    ctx, spheresHandle, primitiveCount, centerBuffer,
-		    radiiBuffer, sbtBuffer));
+		createSphereAccelerationStructure(
+		    ctx, spheresHandle, primitiveCount, centerBuffer, centerCount,
+		    radiiBuffer);
 		primitiveCount += manifold.spheres.size();
 	}
 
@@ -437,13 +336,12 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 	}
 
 	OptixTraversableHandle handle;
-	DeviceBuffer<uint3> indexBuffer =
-	    DeviceBuffer<uint3>(indices.data(), indices.size());
-	sbtBuffer = DeviceBuffer<uint32_t>(sbt.data(), sbt.size());
+    osc::CUDABuffer indexBuffer;
+    indexBuffer.alloc_and_upload(indices);
+    int indexCount = indices.size();
 
-	result.push_back(createAccelerationStructure(
-	    ctx, handle, primitiveCount, triangleVertexBuffer, indexBuffer,
-	    sbtBuffer));
+	createAccelerationStructure(
+	    ctx, handle, primitiveCount, triangleVertexBuffer, triangleVertexCount, indexBuffer, indexCount);
 	primitiveCount += manifold.triangles.size();
 
 	// combine the handles
@@ -456,77 +354,7 @@ static OptixTraversableHandle generateManifoldWithLinearCurves(
 		combinedHandles.push_back(spheresHandle);
 	}
 	combinedHandles.push_back(handle);
-	result.push_back(
-	    createInstanceAccelerationStructure(ctx, handle, combinedHandles));
-	return handle;
-}
-
-// creates acceleration structures of manifold and the spheres intersecting with
-// that manifold, integrates both onto the vector of optix traversable handles
-// called "combinedhandles" (deprecated)
-static OptixTraversableHandle generateManifoldWithSpheres(
-    OptixDeviceContext ctx, DeviceBuffer<float3>& vertexBuffer, \
-		int& primitiveCount,
-    std::vector<DeviceByteBuffer>& result, TetrahedralManifold& manifold,
-    float sphereRadiusAdjustment) {
-	std::vector<uint3> indices = std::vector<uint3>();
-	std::vector<uint32_t> sbt = std::vector<uint32_t>();
-
-	for (TetrahedronBoundary b : manifold.triangles) {
-		indices.push_back(b.indices);
-		sbt.push_back(0);
-	}
-
-	// Prepare device buffers for acceleration structure index and shader
-	// binding table
-	OptixTraversableHandle handle;
-	DeviceBuffer<uint3> indexBuffer =
-	    DeviceBuffer<uint3>(indices.data(), indices.size());
-	DeviceBuffer<uint32_t> sbtBuffer =
-	    DeviceBuffer<uint32_t>(sbt.data(), sbt.size());
-
-	// this creates the acceleration structures for manifolds
-	result.push_back(createAccelerationStructure(
-	    ctx, handle, primitiveCount, vertexBuffer, indexBuffer, sbtBuffer));
-	primitiveCount += manifold.triangles.size();
-
-	std::vector<float3> sphereCenters = std::vector<float3>();
-	std::vector<float> sphereRadii = std::vector<float>();
-	sbt = std::vector<uint32_t>();
-
-	// Sphere coordinates and radii is inside of tetrahedral manifold
-	for (ImplicitSphere sphere : manifold.spheres) {
-		sphereCenters.push_back(sphere.position);
-		sphereRadii.push_back(sphere.radius + sphereRadiusAdjustment);
-		sbt.push_back(0);
-	}
-
-	DeviceBuffer<float3> centerBuffer =
-	    DeviceBuffer<float3>(sphereCenters.data(), sphereCenters.size());
-	DeviceBuffer<float> radiiBuffer =
-	    DeviceBuffer<float>(sphereRadii.data(), sphereRadii.size());
-	sbtBuffer = DeviceBuffer<uint32_t>(sbt.data(), sbt.size());
-
-	OptixTraversableHandle spheresHandle;
-
-	if (manifold.spheres.size() > 0) {
-		// this creates the acceleration structures for spheres
-		result.push_back(createSphereAccelerationStructure(
-		    ctx, spheresHandle, primitiveCount, centerBuffer,
-		    radiiBuffer, sbtBuffer));
-		primitiveCount += manifold.spheres.size();
-	}
-
-	std::vector<OptixTraversableHandle> combinedHandles =
-	    std::vector<OptixTraversableHandle>();
-	combinedHandles.push_back(handle);
-	if (manifold.spheres.size() > 0) {
-		combinedHandles.push_back(spheresHandle);
-	}
-	result.push_back(
-	    createInstanceAccelerationStructure(ctx, handle, combinedHandles));
-
-
+	    createInstanceAccelerationStructure(ctx, handle, combinedHandles);
 	return handle;
 }
 
@@ -534,7 +362,7 @@ static OptixTraversableHandle generateManifoldWithSpheres(
 // override mesh properties and one where mesh overrides sphere properties Calls
 // functions to search for/define manifolds, create traversable handles and
 // their acceleration structures.
-static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
+static void generateTetrahedralAccelerationStructures(
     OptixDeviceContext ctx, TetrahedralMesh& mesh,
     std::vector<PrimitiveSurfaceData>& surfaceData,
     std::vector<ImplicitCurve>& curveData, \
@@ -547,13 +375,12 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 	std::vector<TetrahedralManifold> manifolds =
 	    mesh.buildManifold(tetrahedron_to_manifold);
 
-	std::vector<DeviceByteBuffer> result = std::vector<DeviceByteBuffer>();
 	handles = std::vector<OptixTraversableHandle>();
 	std::vector<OptixTraversableHandle> insideSphereHandles =
 	    std::vector<OptixTraversableHandle>();
 
-	DeviceBuffer<float3> vertexBuffer =
-	    DeviceBuffer<float3>(mesh.nodes.data(), mesh.nodes.size());
+    osc::CUDABuffer vertexBuffer;
+	    vertexBuffer.alloc_and_upload(mesh.nodes);
 
 	std::cout << "Building acceleration structures." << manifolds.size()
 		  << std::endl;
@@ -565,7 +392,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 //		 handles.push_back(generateManifoldWithSpheres(ctx,
 //		 vertexBuffer, primitiveCount, result, manifold, 0.0));
 		 handles.push_back(generateManifoldWithLinearCurves(
-		    ctx, vertexBuffer, primitiveCount, result, manifold, 0.0,
+		    ctx, vertexBuffer, mesh.nodes.size(), primitiveCount, manifold, 0.0,
 		    0.0));
 	}
 
@@ -578,7 +405,7 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 //		 1024.0));
 		// constant to determine how much wider outside-inside intersection tracking primitives should be
 		insideSphereHandles.push_back(generateManifoldWithLinearCurves(
-		    ctx, vertexBuffer, primitiveCount, result, manifold,
+		    ctx, vertexBuffer, mesh.nodes.size(), primitiveCount, manifold,
 		    WIDTH_ADJ, WIDTH_ADJ));
 	}
 
@@ -708,7 +535,6 @@ static std::vector<DeviceByteBuffer> generateTetrahedralAccelerationStructures(
 	    manifolds[tetrahedron_to_manifold[startTetMedium]].material;
 
     printf("\n Starting Material is: %d", startTetMedium);
-	return result;
 }
 
     // helper function for getting built-in intersection shader for sphere 
