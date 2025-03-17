@@ -585,7 +585,7 @@ McxContext::McxContext() {
     // TODO: MOVE THIS SBT CODE TO SEPARATE FUNCTION:
     std::string ptx = std::string(mmcShaderPtx);
 
-    unsigned int TOTAL_PARAM_COUNT = 18;
+    unsigned int TOTAL_PARAM_COUNT = 17;
     unsigned int NUM_ATTRIBS = 4;
 
     // decide on pipeline compile options:

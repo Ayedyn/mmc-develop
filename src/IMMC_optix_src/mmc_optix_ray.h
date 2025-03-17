@@ -6,13 +6,14 @@
 /**
  * @brief struct for Ray information
  */
-typedef struct __attribute__((aligned(16))) MMC_OptiX_Ray {
+typedef struct __attribute__((aligned(32))) MMC_OptiX_Ray {
     float3 p0;                    /**< current photon position */
     float3 dir;                   /**< current photon direction vector */
     float slen;                   /**< the remaining unitless scattering length = length*mus */
     float weight;                 /**< photon current weight */
     float photontimer;            /**< the total time-of-fly of the photon */
     unsigned int mediumid;        /**< ID of current medium type */
+    int inside_implicit_count; /**< count totaling implicits the photon has entered */
     OptixTraversableHandle gashandle;  /**< current gas handle */
 } optixray;
 
@@ -113,6 +114,22 @@ __device__ __forceinline__ void setMediumID(const unsigned int& id) {
 }
 
 /**
+ * @brief Get inside-implicit count
+ */
+__device__ __forceinline__ int getImplicitCount() {
+    int count = static_cast<int>(optixGetPayload_16());
+    return count;
+}
+
+/**
+ * @brief Set inside-implicit count
+ */
+__device__ __forceinline__ void setImplicitCount(const int& count){
+    optixSetPayload_16(static_cast<unsigned int>(count));
+}
+
+
+/**
  * @brief Get RNG seed
  */
 __device__ __forceinline__ uint4 getRNGSeed() {
@@ -160,6 +177,7 @@ __device__ __forceinline__ optixray getRay() {
     r.photontimer = getPhotonTimer();
     r.mediumid = getMediumID();
     r.gashandle = getGasHandle();
+    r.inside_implicit_count = getImplicitCount();
     return r;
 }
 
@@ -174,6 +192,7 @@ __device__ __forceinline__ void setRay(const optixray& r) {
     setPhotonTimer(r.photontimer);
     setMediumID(r.mediumid);
     setGasHandle(r.gashandle);
+    setImplicitCount(r.inside_implicit_count);
 }
 
 /**

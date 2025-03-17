@@ -24,6 +24,19 @@ extern "C" {
     __constant__ MMCParam gcfg;
 }
 
+#ifndef NDEBUG
+// helper function to calculate distance of a point from the line segment of a
+// capsule
+__device__ __forceinline__ float capsule_distance(float3 ctrlpt1,
+                          float3 ctrlpt2, float width,
+                          float3 point) {
+    float h = min(
+        1.0, max(0.0, dot(point - ctrlpt1, ctrlpt2 - ctrlpt1) /
+                  dot((ctrlpt2 - ctrlpt1), (ctrlpt2 - ctrlpt1))));
+    return length(point - ctrlpt1 - h * (ctrlpt2 - ctrlpt1));
+}
+#endif
+
 __device__ __forceinline__ mcx::ImplicitCurve& getCurveFromID(int id) {
     return ((mcx::ImplicitCurve*)gcfg.curveData)[id];
 }
@@ -46,6 +59,7 @@ __device__ __forceinline__ void launchPhoton(optixray& r, mcx::Random& rng) {
     r.photontimer = 0.0f;
     r.mediumid = gcfg.mediumid0;
     r.gashandle = gcfg.gashandle0;
+    r.inside_implicit_count = 0;
 }
 
 /**
@@ -65,7 +79,8 @@ __device__ __forceinline__ void movePhoton(optixray& r, mcx::Random& rng) {
                *(uint32_t*) & (r.slen), *(uint32_t*) & (r.weight), *(uint32_t*) & (r.photontimer),
                r.mediumid,
                rng.intSeed.x, rng.intSeed.y, rng.intSeed.z, rng.intSeed.w,
-               *((uint32_t*) & (r.gashandle) + 1), *(uint32_t*) & (r.gashandle));
+               *((uint32_t*) & (r.gashandle) + 1), *(uint32_t*) & (r.gashandle),
+               *(uint32_t*) & (r.inside_implicit_count));
 }
 
 /**
@@ -164,7 +179,6 @@ __device__ __forceinline__ void saveToBuffer(const uint& eid, const float& w) {
 __device__ __forceinline__ PrimitiveSurfaceData& getSurfaceBoundary(int primIdx) {
     return ((PrimitiveSurfaceData*)gcfg.surfaceBoundaries)[primIdx];
 }
-
 
 /**
  * @brief Accumulate output quantities to a 3D grid
@@ -281,11 +295,51 @@ extern "C" __global__ void __raygen__rg() {
 }
 
 /**
+ * @brief Check if a photon intersection is entering or exiting an implicit shape
+ */
+__device__ __forceinline__ int isEnteringImplicit(unsigned int hitKind){
+   switch(hitKind)
+    {
+        case 1: // first sphere out-to-in
+            return 1;
+        case 2: // first sphere in-to-out
+            return -1;
+        case 3: // cylinder out-to-in
+            return 1;
+        case 4: // cylinder in-to-out
+            return -1;
+        case 5: // second sphere out-to-in
+            return 1;
+        case 6: // second sphere in-to-out
+            return -1;
+        case 138:
+            return optixIsFrontFaceHit(138)-optixIsBackFaceHit(138);
+        case 139:
+            return optixIsFrontFaceHit(139)-optixIsBackFaceHit(139);
+        default:
+            return 0;
+    }
+}
+
+/**
  * @brief when a photon hits a triangle
  */
 extern "C" __global__ void __closesthit__ch() {
+    // print the
+    unsigned int hitkind = optixGetHitKind();
+    printf("The hit type of photon is: %d\n", hitkind);
+
     // get photon and ray information from payload
     optixray r = getRay();
+  
+    #ifndef NDEBUG
+    int old_inside_count = r.inside_implicit_count;
+    printf("The expected implicit addition for this intersection is: %d\n", isEnteringImplicit(hitkind));
+    #endif
+
+    // Update inside-implicit count based on hitkind
+    // TODO: make sure tracking doesn't result in negative numbers here, UNDEFINED BEHAVIOR
+    r.inside_implicit_count += isEnteringImplicit(hitkind);
 
     // get rng
     mcx::Random rng = getRNG();
@@ -299,6 +353,19 @@ extern "C" __global__ void __closesthit__ch() {
     // save output
     accumulateOutput(r, currprop, lmove);
 
+    #ifndef NDEBUG
+    float3 startloc = r.p0;
+    float3 endloc = r.p0 + r.dir * (lmove + SAFETY_DISTANCE);
+    float3 vertex1 = make_float3(30, 15, 30);
+    float3 vertex2 = make_float3(30, 45, 30);
+    float width = 10;
+    printf(
+    "Closesthit ran, hitkind is: %u\nStart Coordinates are %f, %f, %f,\nEnd Coordinates are: %f, %f, %f\nStarting distance is: %f, End Distance is: %f\nInside Implicit Count is updated from: %d to %d\n", 
+            hitkind, startloc.x, startloc.y, startloc.z, endloc.x, endloc.y, endloc.z, 
+            capsule_distance(vertex1, vertex2, width, startloc), capsule_distance(vertex1, vertex2, width, endloc), 
+            old_inside_count, r.inside_implicit_count);
+    #endif
+    
     // update photon position
     r.p0 += r.dir * (lmove + SAFETY_DISTANCE);
 
@@ -380,9 +447,9 @@ extern "C" __global__ void __miss__ms() {
     setRay(r);
 }
 
-// tests intersection of ray with a sphere and returns intersections as floats of distance from     start of ray
-// geometric solution taken from: scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-trace    r-rendering-simple-shapes/ray-sphere-intersection.html
-__device__ __forceinline__ float2 get_sphere_intersections(const float3 center,
+// tests intersection of ray with a sphere and returns intersections as floats of distance from start of ray
+// geometric solution taken from: scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection.html
+__device__ __forceinline__ float3 get_sphere_intersections(const float3 center,
         const float width, const float3 ray_origin, const float3 ray_dir) {
 
     float3 L = center - ray_origin;
@@ -392,14 +459,19 @@ __device__ __forceinline__ float2 get_sphere_intersections(const float3 center,
 
     // result if no intersections, set both to negatives
     if (d2 > width * width) {
-        float2 hitTs = make_float2(-1, -1);
+        float3 hitTs = make_float3(-1, -1, -1);
         return hitTs;
     }
 
     // calculates both intersections
     float thc = sqrt(width * width - d2);
-    float2 hitTs;
+    float3 hitTs;
     hitTs.x = tca - thc;
+    if(hitTs.x<0){ // hitT less than 0 indicates an inside-to-outside intersection type
+        hitTs.z = __uint_as_float(1);
+    } else{
+        hitTs.z = __uint_as_float(0);
+    }
     hitTs.y = tca + thc;
     return hitTs;
 }
@@ -407,7 +479,8 @@ __device__ __forceinline__ float2 get_sphere_intersections(const float3 center,
 // tests intersection of ray with an infinite cylinder (derived from parametric substitution)
 // from davidjcobb.github.io/articles/ray-cylinder-intersection
 // solve a quadratic equation of at^2+bt+c = 0 for t
-__device__ __forceinline__ float2 get_inf_cyl_intersections(const float3 vertex1,
+// third float is 1 if inside-to-out intersection and 0 if outside-to-in intersection
+__device__ __forceinline__ float3 get_inf_cyl_intersections(const float3 vertex1,
         const float3 vertex2, const float width, const float3 ray_origin,
         const float3 ray_dir) {
     float3 R1 = ray_origin - vertex2;
@@ -423,20 +496,24 @@ __device__ __forceinline__ float2 get_inf_cyl_intersections(const float3 vertex1
     float b = 2 * (dot(ray_dir, R1) - Ca_dot_Rd * Ca_dot_R1);
     float c = R1_dot_R1 - Ca_dot_R1 * Ca_dot_R1 - (width * width);
 
-    float2 cyl_hits;
+    float3 cyl_hits;
     float discriminant = b * b - 4.0f * a * c;
 
     if (discriminant < 0) {
         cyl_hits.x = -1;
-        cyl_hits.y = -1;
+        cyl_hits.y = -1; 
         return cyl_hits;
     }
 
     cyl_hits.x = (-b - sqrt(discriminant)) / (2 * a);
+    if(cyl_hits.x<0){
+        cyl_hits.z=__uint_as_float(1);
+    } else{
+        cyl_hits.z=__uint_as_float(0);
+    }
     cyl_hits.y = (-b + sqrt(discriminant)) / (2 * a);
     return cyl_hits;
 }
-
 
 // intersection test for curve primitives
 extern "C" __global__ void __intersection__customlinearcurve() {
@@ -466,7 +543,7 @@ extern "C" __global__ void __intersection__customlinearcurve() {
     float3 ray_origin = optixGetWorldRayOrigin();
 
     // test for intersections with sphere 1:
-    float2 sphere_one_hits = get_sphere_intersections(curve.vertex1, width, ray_origin, ray_dir)    ;
+    float3 sphere_one_hits = get_sphere_intersections(curve.vertex1, width, ray_origin, ray_dir);
 
     // get coordinates for intersections
     float3 sphere_one_hit_one = ray_origin + ray_dir * sphere_one_hits.x;
@@ -481,12 +558,13 @@ extern "C" __global__ void __intersection__customlinearcurve() {
     if (dot(sphere_one_hit_two - curve.vertex1, lineseg_AB) < 0) {
         sphere_one_hits.y = -1;
     }
-
-    optixReportIntersection(sphere_one_hits.x, 1);
-    optixReportIntersection(sphere_one_hits.y, 1);
+    
+    unsigned int isInsideToOutsideSphOne = __float_as_uint(sphere_one_hits.z);
+    optixReportIntersection(sphere_one_hits.x, 1+isInsideToOutsideSphOne);
+    optixReportIntersection(sphere_one_hits.y, 1+isInsideToOutsideSphOne);
 
     // test for intersections with sphere 2:
-    float2 sphere_two_hits = get_sphere_intersections(curve.vertex2, width, ray_origin, ray_dir)    ;
+    float3 sphere_two_hits = get_sphere_intersections(curve.vertex2, width, ray_origin, ray_dir);
     // get coordinates for intersections
     float3 sphere_two_hit_one = ray_origin + (ray_dir * sphere_two_hits.x);
     float3 sphere_two_hit_two = ray_origin + (ray_dir * sphere_two_hits.y);
@@ -500,11 +578,12 @@ extern "C" __global__ void __intersection__customlinearcurve() {
         sphere_two_hits.y = -1;
     }
 
-    optixReportIntersection(sphere_two_hits.x, 2);
-    optixReportIntersection(sphere_two_hits.y, 2);
+    unsigned int isInsideToOutsideSphTwo = __float_as_uint(sphere_two_hits.z);
+    optixReportIntersection(sphere_two_hits.x, 3+isInsideToOutsideSphTwo);
+    optixReportIntersection(sphere_two_hits.y, 3+isInsideToOutsideSphTwo);
 
     // test for intersections with infinite cylinder:
-    float2 cyl_hits = get_inf_cyl_intersections(curve.vertex1, curve.vertex2, width, ray_origin,     ray_dir);
+    float3 cyl_hits = get_inf_cyl_intersections(curve.vertex1, curve.vertex2, width, ray_origin, ray_dir);
 
     // discard intersections on exterior of cylinder:
     float3 cyl_hit_one = ray_origin + ray_dir * cyl_hits.x;
@@ -520,11 +599,9 @@ extern "C" __global__ void __intersection__customlinearcurve() {
         cyl_hits.y = -1;
     }
 
-    optixReportIntersection(cyl_hits.x, 3);
-    optixReportIntersection(cyl_hits.y, 3);
+    unsigned int isInsideToOutsideCyl = __float_as_uint(cyl_hits.z);
+    optixReportIntersection(cyl_hits.x, 5+isInsideToOutsideCyl);
+    optixReportIntersection(cyl_hits.y, 5+isInsideToOutsideCyl);
 
     return;
-
 }
-
-
