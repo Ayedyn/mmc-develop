@@ -1,5 +1,5 @@
 % read output
-fid=fopen('optix_basic_sphere_1e8.bin');
+fid=fopen('optix.bin');
 output=fread(fid,'float64');
 
 % retrieve results
@@ -9,7 +9,7 @@ res = sum(res, 4);
 
 % visualize
 fluence_IMMC=res;
-fluence_IMMC=fluence_IMMC./1e8;
+%fluence_IMMC=fluence_IMMC./1e8;
 
 % prepare DMMC results
 fluence_IMMC=squeeze(fluence_IMMC(30,:,:,:));

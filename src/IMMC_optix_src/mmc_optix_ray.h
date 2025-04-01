@@ -213,10 +213,10 @@ __device__ __forceinline__ void setRNG(const mcx::Random& rng) {
  * @brief print ray information
  */
 __device__ __forceinline__ void printRay(const optixray& r) {
-    printf("pos:[%f %f %f], dir:[%f %f %f], slen:%f, weight:%f, tof:%fns, type:%u\n",
+    printf("pos:[%f %f %f], dir:[%f %f %f], slen:%f, weight:%f, tof:%fns, type:%u, inside-implicit count:%d\n",
            r.p0.x, r.p0.y, r.p0.z,
            r.dir.x, r.dir.y, r.dir.z,
-           r.slen, r.weight, r.photontimer * 1e9, r.mediumid);
+           r.slen, r.weight, r.photontimer * 1e9, r.mediumid, r.inside_implicit_count);
 }
 
 #endif

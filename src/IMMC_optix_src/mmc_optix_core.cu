@@ -24,18 +24,19 @@ extern "C" {
     __constant__ MMCParam gcfg;
 }
 
-#ifndef NDEBUG
 // helper function to calculate distance of a point from the line segment of a
 // capsule
 __device__ __forceinline__ float capsule_distance(float3 ctrlpt1,
-                          float3 ctrlpt2, float width,
+                          float3 ctrlpt2,
                           float3 point) {
-    float h = min(
-        1.0, max(0.0, dot(point - ctrlpt1, ctrlpt2 - ctrlpt1) /
-                  dot((ctrlpt2 - ctrlpt1), (ctrlpt2 - ctrlpt1))));
-    return length(point - ctrlpt1 - h * (ctrlpt2 - ctrlpt1));
+    float3 pa = point-ctrlpt1;
+    float3 ba = ctrlpt2-ctrlpt1;
+
+    float h = dot(pa, ba) / dot(ba, ba);
+    h = max(h, 0.0);
+    h = min(h, 1.0);
+    return length((point - ctrlpt1) - (h * (ctrlpt2 - ctrlpt1)));
 }
-#endif
 
 __device__ __forceinline__ mcx::ImplicitCurve& getCurveFromID(int id) {
     return ((mcx::ImplicitCurve*)gcfg.curveData)[id];
@@ -163,7 +164,9 @@ __device__ __forceinline__ uint getTimeFrame(const float& tof) {
 __device__ __forceinline__ void saveToBuffer(const uint& eid, const float& w) {
     // to minimize numerical error, use the same trick as MCX
     // becomes much slower when using atomicAdd(*double, double)
-    float accum = atomicAdd(&((float*)gcfg.outputbuffer)[eid], w);
+    //float accum = atomicAdd(&((float*)gcfg.outputbuffer)[eid], w);
+    float accum = atomicExch(&((float*)gcfg.outputbuffer)[eid], w);//w; 
+    //printf("Accum: %f\n", accum); 
 
     if (accum > MAX_ACCUM) {
         if (atomicAdd(&((float*)gcfg.outputbuffer)[eid], -accum) < 0.0f) {
@@ -199,8 +202,8 @@ __device__ __forceinline__ void accumulateOutput(const optixray& r, const Medium
 
     // find the information of the first segment
     uint oldeid = getTimeFrame(currtof) + getVoxelIdx(segmid);
-    float oldweight = segloss;
-
+    float oldweight = static_cast<float>(r.inside_implicit_count);// segloss;
+    //printf("oldweight is: %f\n", oldweight);
     // iterater over the rest of the segments
     for (int i = 1; i < segcount; ++i) {
         // update information for the curr segment
@@ -214,10 +217,10 @@ __device__ __forceinline__ void accumulateOutput(const optixray& r, const Medium
             saveToBuffer(oldeid, oldweight);
             // reset oldeid and weight bucket
             oldeid = neweid;
-            oldweight = 0.0f;
+            //oldweight = 0.0f;
         }
 
-        oldweight += segloss;
+        //oldweight += segloss;
     }
 
     // save the weight loss of the last segment
@@ -300,17 +303,17 @@ extern "C" __global__ void __raygen__rg() {
 __device__ __forceinline__ int isEnteringImplicit(unsigned int hitKind){
    switch(hitKind)
     {
-        case 1: // first sphere out-to-in
+        case 2: // first sphere out-to-in
             return 1;
-        case 2: // first sphere in-to-out
+        case 3: // first sphere in-to-out
             return -1;
-        case 3: // cylinder out-to-in
+        case 4: // second sphere out-to-in
             return 1;
-        case 4: // cylinder in-to-out
+        case 5: // second sphere in-to-out
             return -1;
-        case 5: // second sphere out-to-in
+        case 6: // inf cylinder out-to-in
             return 1;
-        case 6: // second sphere in-to-out
+        case 7: // inf cylinder in-to-out
             return -1;
         case 138:
             return optixIsFrontFaceHit(138)-optixIsBackFaceHit(138);
@@ -327,19 +330,15 @@ __device__ __forceinline__ int isEnteringImplicit(unsigned int hitKind){
 extern "C" __global__ void __closesthit__ch() {
     // print the
     unsigned int hitkind = optixGetHitKind();
-    printf("The hit type of photon is: %d\n", hitkind);
+    //printf("The hit type of photon is: %d\n", hitkind);
 
     // get photon and ray information from payload
     optixray r = getRay();
   
-    #ifndef NDEBUG
-    int old_inside_count = r.inside_implicit_count;
-    printf("The expected implicit addition for this intersection is: %d\n", isEnteringImplicit(hitkind));
-    #endif
-
     // Update inside-implicit count based on hitkind
     // TODO: make sure tracking doesn't result in negative numbers here, UNDEFINED BEHAVIOR
     r.inside_implicit_count += isEnteringImplicit(hitkind);
+    //printf("isEnteringImplicit is: %d\n", isEnteringImplicit(hitkind));
 
     // get rng
     mcx::Random rng = getRNG();
@@ -353,22 +352,28 @@ extern "C" __global__ void __closesthit__ch() {
     // save output
     accumulateOutput(r, currprop, lmove);
 
-    #ifndef NDEBUG
-    float3 startloc = r.p0;
-    float3 endloc = r.p0 + r.dir * (lmove + SAFETY_DISTANCE);
-    float3 vertex1 = make_float3(30, 15, 30);
-    float3 vertex2 = make_float3(30, 45, 30);
-    float width = 10;
-    printf(
-    "Closesthit ran, hitkind is: %u\nStart Coordinates are %f, %f, %f,\nEnd Coordinates are: %f, %f, %f\nStarting distance is: %f, End Distance is: %f\nInside Implicit Count is updated from: %d to %d\n", 
-            hitkind, startloc.x, startloc.y, startloc.z, endloc.x, endloc.y, endloc.z, 
-            capsule_distance(vertex1, vertex2, width, startloc), capsule_distance(vertex1, vertex2, width, endloc), 
-            old_inside_count, r.inside_implicit_count);
-    #endif
-    
     // update photon position
     r.p0 += r.dir * (lmove + SAFETY_DISTANCE);
-
+/*
+    float dist = capsule_distance(make_float3(30, 15, 30), make_float3(30, 45, 30), r.p0);
+    bool isInCapsule = dist<10;
+    
+    if(!isInCapsule && r.inside_implicit_count==0){
+        printf("Closesthit run, ray is outside capsule (dist=%f, hitT=%f, hittype:%d), CORRECT IMPLICIT ID\n", dist, lmove, hitkind); 
+    }
+    else if(!isInCapsule && r.inside_implicit_count>0){
+        printf("Closesthit run, ray is outside capsule, (dist=%f, hitT=%f, hittype:%d), INCORRECT IMPLICIT ID\n", dist, lmove, hitkind);
+    }
+    else if(isInCapsule && r.inside_implicit_count==1){
+        printf("Closesthit run, ray is inside capsule, (dist=%f, hitT=%f, hittype:%d), CORRECT IMPLICIT ID\n", dist, lmove, hitkind);
+    }
+    else if(isInCapsule && r.inside_implicit_count==0){
+        printf("Closesthit run, ray is inside capsule, (dist=%f, hitT=%f, hittype:%d), INCORRECT IMPLICIT ID\n", dist, lmove, hitkind);
+    }
+    else{
+        printf("Closesthit run, INCORRECT IMPLICIT ID, (dist=%f, hitT=%f)\n", dist, lmove);
+    }
+    printRay(r); */  
     // update photon weight
     r.weight *= expf(-currprop.mua * lmove);
 
@@ -445,6 +450,28 @@ extern "C" __global__ void __miss__ms() {
 
     // update ray
     setRay(r);
+
+    /*
+    float dist = capsule_distance(make_float3(30, 15, 30), make_float3(30, 45, 30), r.p0);
+    bool isInCapsule = dist<10;
+    
+    if(!isInCapsule && r.inside_implicit_count==0){
+        printf("Miss run, ray is outside capsule (dist=%f), CORRECT IMPLICIT ID\n", dist);
+    }
+    else if(!isInCapsule && r.inside_implicit_count>0){
+        printf("Miss run, ray is outside capsule, (dist=%f), INCORRECT IMPLICIT ID\n", dist);
+    }
+    else if(isInCapsule && r.inside_implicit_count==1){
+        printf("Miss run, ray is inside capsule, (dist=%f), CORRECT IMPLICIT ID\n", dist);
+    }
+    else if(isInCapsule && r.inside_implicit_count==0){
+        printf("Miss run, ray is inside capsule, (dist=%f), INCORRECT IMPLICIT ID\n", dist);
+    }
+    else{
+        printf("Miss run, INCORRECT IMPLICIT ID (dist=%f)\n", dist);
+    }
+
+    printRay(r);*/ 
 }
 
 // tests intersection of ray with a sphere and returns intersections as floats of distance from start of ray
@@ -459,7 +486,7 @@ __device__ __forceinline__ float3 get_sphere_intersections(const float3 center,
 
     // result if no intersections, set both to negatives
     if (d2 > width * width) {
-        float3 hitTs = make_float3(-1, -1, -1);
+        float3 hitTs = make_float3(-1, -1, __uint_as_float(0));
         return hitTs;
     }
 
@@ -467,9 +494,10 @@ __device__ __forceinline__ float3 get_sphere_intersections(const float3 center,
     float thc = sqrt(width * width - d2);
     float3 hitTs;
     hitTs.x = tca - thc;
-    if(hitTs.x<0){ // hitT less than 0 indicates an inside-to-outside intersection type
+    if(dot(L,L)-(width * width) <0){ // hitT less than 0 indicates an inside-to-outside intersection type
         hitTs.z = __uint_as_float(1);
-    } else{
+    }
+    else{
         hitTs.z = __uint_as_float(0);
     }
     hitTs.y = tca + thc;
@@ -501,17 +529,20 @@ __device__ __forceinline__ float3 get_inf_cyl_intersections(const float3 vertex1
 
     if (discriminant < 0) {
         cyl_hits.x = -1;
-        cyl_hits.y = -1; 
+        cyl_hits.y = -1;
+        cyl_hits.z = __uint_as_float(0); 
         return cyl_hits;
     }
 
     cyl_hits.x = (-b - sqrt(discriminant)) / (2 * a);
-    if(cyl_hits.x<0){
+    cyl_hits.y = (-b + sqrt(discriminant)) / (2 * a);
+    
+    if(cyl_hits.x<0 || cyl_hits.y<0){
         cyl_hits.z=__uint_as_float(1);
     } else{
         cyl_hits.z=__uint_as_float(0);
     }
-    cyl_hits.y = (-b + sqrt(discriminant)) / (2 * a);
+    
     return cyl_hits;
 }
 
@@ -520,22 +551,12 @@ extern "C" __global__ void __intersection__customlinearcurve() {
 
     // 1. initialize variables for geometry
     int primIdx = optixGetPrimitiveIndex();
-    unsigned int curveIdx;
 
-    float width_offset = 0;
-
-    if (primIdx >= gcfg.num_inside_prims) {
-        curveIdx = primIdx - gcfg.num_inside_prims;
-        width_offset = gcfg.WIDTH_ADJ;
-    } else {
-        curveIdx = primIdx;
-    }
-
-    const mcx::ImplicitCurve& curve = getCurveFromID(curveIdx);
+    const mcx::ImplicitCurve& curve = getCurveFromID(primIdx);
 
     // vector going from pt2 to pt1:
     float3 lineseg_AB = curve.vertex1 - curve.vertex2;
-    float width = curve.width + width_offset;
+    float width = curve.width;
     float t_min = optixGetRayTmin();
     float t_max = optixGetRayTmax();
     // get normalized ray direction
@@ -551,17 +572,18 @@ extern "C" __global__ void __intersection__customlinearcurve() {
 
     // discard intersections on interior side of sphere 1:
     // (discard if negative when taking dot product with vector AB)
-    if (dot(sphere_one_hit_one - curve.vertex1, lineseg_AB) < 0) {
+    if (dot(sphere_one_hit_one - curve.vertex1, lineseg_AB) < 0 || sphere_one_hits.x<t_min) {
         sphere_one_hits.x = -1;
     }
 
-    if (dot(sphere_one_hit_two - curve.vertex1, lineseg_AB) < 0) {
+    if (dot(sphere_one_hit_two - curve.vertex1, lineseg_AB) < 0 || sphere_one_hits.y<t_min) {
         sphere_one_hits.y = -1;
     }
     
     unsigned int isInsideToOutsideSphOne = __float_as_uint(sphere_one_hits.z);
-    optixReportIntersection(sphere_one_hits.x, 1+isInsideToOutsideSphOne);
-    optixReportIntersection(sphere_one_hits.y, 1+isInsideToOutsideSphOne);
+    //printf("Sphere 1 hit type is: %u, isInsideToOutsideSphOne is: %u\n", 1+isInsideToOutsideSphOne, isInsideToOutsideSphOne);
+    optixReportIntersection(sphere_one_hits.x, 2+isInsideToOutsideSphOne);
+    optixReportIntersection(sphere_one_hits.y, 2+isInsideToOutsideSphOne);
 
     // test for intersections with sphere 2:
     float3 sphere_two_hits = get_sphere_intersections(curve.vertex2, width, ray_origin, ray_dir);
@@ -570,38 +592,45 @@ extern "C" __global__ void __intersection__customlinearcurve() {
     float3 sphere_two_hit_two = ray_origin + (ray_dir * sphere_two_hits.y);
 
     // discard intersections on interior side of sphere 2:
-    if (dot(curve.vertex2 - sphere_two_hit_one, lineseg_AB) < 0) {
+    if (dot(curve.vertex2 - sphere_two_hit_one, lineseg_AB) < 0 || sphere_two_hits.x<t_min) {
         sphere_two_hits.x = -1;
     }
 
-    if (dot(curve.vertex2 - sphere_two_hit_two, lineseg_AB) < 0) {
+    if (dot(curve.vertex2 - sphere_two_hit_two, lineseg_AB) < 0 || sphere_two_hits.y<t_min) {
         sphere_two_hits.y = -1;
     }
 
     unsigned int isInsideToOutsideSphTwo = __float_as_uint(sphere_two_hits.z);
-    optixReportIntersection(sphere_two_hits.x, 3+isInsideToOutsideSphTwo);
-    optixReportIntersection(sphere_two_hits.y, 3+isInsideToOutsideSphTwo);
+    optixReportIntersection(sphere_two_hits.x, 4+isInsideToOutsideSphTwo);
+    optixReportIntersection(sphere_two_hits.y, 4+isInsideToOutsideSphTwo);
+    //printf("Sphere 2 hit type is: %u, isInsideToOutsideSphTwo is: %u\n", 3+isInsideToOutsideSphTwo, isInsideToOutsideSphTwo);
 
     // test for intersections with infinite cylinder:
     float3 cyl_hits = get_inf_cyl_intersections(curve.vertex1, curve.vertex2, width, ray_origin, ray_dir);
 
     // discard intersections on exterior of cylinder:
-    float3 cyl_hit_one = ray_origin + ray_dir * cyl_hits.x;
-    float3 cyl_hit_two = ray_origin + ray_dir * cyl_hits.y;
+    float3 cyl_hit_one = ray_origin + (ray_dir * cyl_hits.x);
+    float3 cyl_hit_two = ray_origin + (ray_dir * cyl_hits.y);
 
+    //printf("Testing for culling of cyl hit 1: %f, %f, %f, dot prod 1: %f dot prod 2: %f\n", cyl_hit_one.x, cyl_hit_one.y, cyl_hit_one.z, 
+//            dot(cyl_hit_one-curve.vertex1, lineseg_AB), dot(cyl_hit_one - curve.vertex2, lineseg_AB));
     if (dot(cyl_hit_one - curve.vertex1, lineseg_AB) > 0 ||
-            dot(cyl_hit_one - curve.vertex2, lineseg_AB) < 0) {
+            dot(cyl_hit_one - curve.vertex2, lineseg_AB) < 0 || cyl_hits.x<t_min) {
         cyl_hits.x = -1;
+        //printf("culling extra cylhits 1 triggered\n");
     }
-
+    //printf("Testing for culling of cyl hit 2: %f, %f, %f, dot prod 1: %f dot prod 2: %f\n", cyl_hit_two.x, cyl_hit_two.y, cyl_hit_two.z, 
+ //           dot(cyl_hit_two-curve.vertex1, lineseg_AB), dot(cyl_hit_one - curve.vertex2, lineseg_AB));
     if (dot(cyl_hit_two - curve.vertex1, lineseg_AB) > 0 ||
-            dot(cyl_hit_two - curve.vertex2, lineseg_AB) < 0) {
+            dot(cyl_hit_two - curve.vertex2, lineseg_AB) < 0 || cyl_hits.y<t_min) {
         cyl_hits.y = -1;
+         //printf("culling extra cylhits 2 triggered\n");
     }
 
     unsigned int isInsideToOutsideCyl = __float_as_uint(cyl_hits.z);
-    optixReportIntersection(cyl_hits.x, 5+isInsideToOutsideCyl);
-    optixReportIntersection(cyl_hits.y, 5+isInsideToOutsideCyl);
-
+    optixReportIntersection(cyl_hits.x, 6+isInsideToOutsideCyl);
+    optixReportIntersection(cyl_hits.y, 6+isInsideToOutsideCyl);
+    //printf("Cyl hit type is: %u, isInsideToOutsideCyl is: %u\n", 5+isInsideToOutsideCyl, isInsideToOutsideCyl);
+    
     return;
 }

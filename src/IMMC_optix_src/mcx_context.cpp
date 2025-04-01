@@ -377,6 +377,7 @@ static void generateTetrahedralAccelerationStructures(
     printf("\nThe number of inside primitives is: %d", primitiveCount);
     num_inside_prims = primitiveCount;
 
+    
     // one for inside spheres
     for (TetrahedralManifold manifold : manifolds) {
         // constant to determine how much wider outside-inside intersection tracking primitives should be
@@ -404,7 +405,8 @@ static void generateTetrahedralAccelerationStructures(
         for (ImplicitCurve s : manifolds[i].curves) {
             float4 facenorm_and_mediumid = make_float4(0, 0, 0, storeuintAsFloat(SPHERE_MATERIAL));
             surfaceData.push_back(PrimitiveSurfaceData{
-                facenorm_and_mediumid, insideSphereHandles[i]});
+                //facenorm_and_mediumid, insideSphereHandles[i]});
+                facenorm_and_mediumid, handles[i]});
             curveData.push_back(s);
         }
 
@@ -417,7 +419,8 @@ static void generateTetrahedralAccelerationStructures(
             float4 facenorm_and_mediumid = make_float4(s.position.x, s.position.y, s.position.z,
                                            storeuintAsFloat(1));
             surfaceData.push_back(PrimitiveSurfaceData{
-                facenorm_and_mediumid, insideSphereHandles[i]});
+                //facenorm_and_mediumid, insideSphereHandles[i]});
+                facenorm_and_mediumid, handles[i]});
         }
 
 #ifndef NDEBUG
@@ -938,7 +941,7 @@ void McxContext::simulate(TetrahedralMesh& mesh, uint3 size,
                             paraBuffer.sizeInBytes, &this->SBT, launchWidth,
                             1, 1));
 
-    printf("\nsim completed successfully");
+    printf("\nsim completed successfully\n");
 
     // download from GPU the outputted data
     outputBuffer.download(outputHostBuffer, outputSize);
