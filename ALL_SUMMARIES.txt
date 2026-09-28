@@ -1,0 +1,48 @@
+tag: linux-x86_64
+matlab: 26.1.0.3346908 (R2026a) Update 5  arch: glnxa64
+uname: Linux runnervmtr4k5 6.17.0-1022-azure #22-Ubuntu SMP Mon Jul 27 17:24:03 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+exe suffix used by iso2mesh: .mexa64
+/home/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/cork.mexa64: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), statically linked, no section header
+ec237acdd380d68a3f393232ed40da8d0573d5bc  /home/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/cork.mexa64
+/home/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/tetgen.mexa64: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), statically linked, no section header
+975d336ed10f3a7e7fd2bee66af8c84995e677cb  /home/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/tetgen.mexa64
+iso2mesh temp dir: /tmp/iso2mesh-runner
+
+[default] PASS  surf: 710 nodes 1262 faces, min area 0.151  | vol: 83656 nodes 502962 elems, labels [1  2  3], zero-vol 0
+[seed1] PASS  surf: 710 nodes 1262 faces, min area 0.151  | vol: 83393 nodes 502015 elems, labels [1  2  3], zero-vol 0
+[seed2] PASS  surf: 710 nodes 1262 faces, min area 0.151  | vol: 83414 nodes 501839 elems, labels [1  2  3], zero-vol 0
+[seed12345] PASS  surf: 710 nodes 1262 faces, min area 0.151  | vol: 83516 nodes 502280 elems, labels [1  2  3], zero-vol 0
+[seed99999] PASS  surf: 710 nodes 1262 faces, min area 0.151  | vol: 83609 nodes 502591 elems, labels [1  2  3], zero-vol 0
+[nocork] PASS  surf: 508 nodes 786 faces, min area 19.3  | vol: 87017 nodes 519527 elems, labels [1  2  3], zero-vol 0
+tag: macos-arm64-rosetta-x86bins
+matlab: 26.1.0.3346908 (R2026a) Update 5  arch: maca64
+uname: Darwin sjc20-bb710-2fe5d41f-2c70-44ef-ae70-fc7a46ca7ffb-26B5C6A9B19C.local 24.6.0 Darwin Kernel Version 24.6.0: Tue Jul 21 20:51:34 PDT 2026; root:xnu-11417.140.69.711.44~1/RELEASE_ARM64_VMAPPLE arm64
+exe suffix used by iso2mesh: .mexmaca64
+/Users/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/cork.mexmaca64: Mach-O 64-bit executable x86_64
+8182187b956fea52c2404caee50702ca48fdbe49  /Users/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/cork.mexmaca64
+/Users/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/tetgen.mexmaca64: Mach-O 64-bit executable x86_64
+7ac1a7e27d6f3bd6547011988782852b4001ba37  /Users/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/tetgen.mexmaca64
+iso2mesh temp dir: /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/iso2mesh-runner
+
+[default] FAIL  surf: 748 nodes 1342 faces, min area 0.152  | Tetgen command failed: Opening /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/iso2mesh-runner/post_vmesh.poly. Constructing Delaunay tetrahedralization. Delaunay seconds: 0.015885 Creating surface mesh. Recovering boundaries. Error: Invalid PLC! A point and a subface intersect Point 9. Subface (#1273) (724, 722, 5) Program stopped. 
+[seed1] FAIL  surf: 748 nodes 1342 faces, min area 0.152  | Tetgen command failed: Opening /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/iso2mesh-runner/post_vmesh.poly. Constructing Delaunay tetrahedralization. Delaunay seconds: 0.014444 Creating surface mesh. Recovering boundaries. Assertion failed: (0), function formcavity, file tetgen.cxx, line 20522. 
+[seed2] FAIL  surf: 748 nodes 1342 faces, min area 0.152  | Tetgen command failed: Opening /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/iso2mesh-runner/post_vmesh.poly. Constructing Delaunay tetrahedralization. Delaunay seconds: 0.015837 Creating surface mesh. Recovering boundaries. Error: Invalid PLC! A point and a subface intersect Point 9. Subface (#1278) (722, 5, 723) Program stopped. 
+[seed12345] PASS  surf: 748 nodes 1342 faces, min area 0.152  | vol: 83151 nodes 500266 elems, labels [1  2  3], zero-vol 0
+[seed99999] FAIL  surf: 748 nodes 1342 faces, min area 0.152  | Tetgen command failed: Opening /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/iso2mesh-runner/post_vmesh.poly. Constructing Delaunay tetrahedralization. Delaunay seconds: 0.015799 Creating surface mesh. Recovering boundaries. Assertion failed: (crossface.tet != NULL), function scoutcrosstet, file tetgen.cxx, line 20240. 
+[nocork] PASS  surf: 515 nodes 796 faces, min area 19.4  | vol: 87217 nodes 520873 elems, labels [1  2  3], zero-vol 0
+tag: macos-arm64
+matlab: 26.1.0.3346908 (R2026a) Update 5  arch: maca64
+uname: Darwin iad20-gt1023-40b845f6-d299-44d6-b76b-2d267f3d4722-EADECDC9CC53.local 24.6.0 Darwin Kernel Version 24.6.0: Tue Jul 21 20:51:34 PDT 2026; root:xnu-11417.140.69.711.44~1/RELEASE_ARM64_VMAPPLE arm64
+exe suffix used by iso2mesh: .mexmaca64
+/Users/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/cork.mexmaca64: Mach-O 64-bit executable arm64
+76139131272166687b015b6e54d298c6f494a8a0  /Users/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/cork.mexmaca64
+/Users/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/tetgen.mexmaca64: Mach-O 64-bit executable arm64
+fe62ecb8e930cb04926818c6d2d0ea40f7b613da  /Users/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/tetgen.mexmaca64
+iso2mesh temp dir: /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/iso2mesh-runner
+
+[default] FAIL  surf: 748 nodes 1342 faces, min area 0.152  | Tetgen command failed: Opening /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/iso2mesh-runner/post_vmesh.poly. Constructing Delaunay tetrahedralization. Delaunay seconds: 0.014416 Creating surface mesh. Recovering boundaries. Error: Invalid PLC! A point and a subface intersect Point 9. Subface (#1273) (724, 722, 5) Program stopped. 
+[seed1] FAIL  surf: 748 nodes 1342 faces, min area 0.152  | Tetgen command failed: Opening /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/iso2mesh-runner/post_vmesh.poly. Constructing Delaunay tetrahedralization. Delaunay seconds: 0.014303 Creating surface mesh. Recovering boundaries. Assertion failed: (0), function formcavity, file tetgen.cxx, line 20522. 
+[seed2] FAIL  surf: 748 nodes 1342 faces, min area 0.152  | Tetgen command failed: Opening /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/iso2mesh-runner/post_vmesh.poly. Constructing Delaunay tetrahedralization. Delaunay seconds: 0.014035 Creating surface mesh. Recovering boundaries. Error: Invalid PLC! A point and a subface intersect Point 9. Subface (#1278) (722, 5, 723) Program stopped. 
+[seed12345] PASS  surf: 748 nodes 1342 faces, min area 0.152  | vol: 83122 nodes 500043 elems, labels [1  2  3], zero-vol 0
+[seed99999] FAIL  surf: 748 nodes 1342 faces, min area 0.152  | Tetgen command failed: Opening /private/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/iso2mesh-runner/post_vmesh.poly. Constructing Delaunay tetrahedralization. Delaunay seconds: 0.016842 Creating surface mesh. Recovering boundaries. Assertion failed: (crossface.tet != NULL), function scoutcrosstet, file tetgen.cxx, line 20240. 
+[nocork] PASS  surf: 515 nodes 796 faces, min area 19.4  | vol: 87216 nodes 521063 elems, labels [1  2  3], zero-vol 0

@@ -1,0 +1,16 @@
+tag: linux-x86_64
+matlab: 26.1.0.3346908 (R2026a) Update 5  arch: glnxa64
+uname: Linux runnervmtr4k5 6.17.0-1022-azure #22-Ubuntu SMP Mon Jul 27 17:24:03 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+exe suffix used by iso2mesh: .mexa64
+/home/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/cork.mexa64: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), statically linked, no section header
+ec237acdd380d68a3f393232ed40da8d0573d5bc  /home/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/cork.mexa64
+/home/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/tetgen.mexa64: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), statically linked, no section header
+975d336ed10f3a7e7fd2bee66af8c84995e677cb  /home/runner/work/mmc-develop/mmc-develop/iso2mesh/bin/tetgen.mexa64
+iso2mesh temp dir: /tmp/iso2mesh-runner
+
+[default] PASS  surf: 710 nodes 1262 faces, min area 0.151  | vol: 83656 nodes 502962 elems, labels [1  2  3], zero-vol 0
+[seed1] PASS  surf: 710 nodes 1262 faces, min area 0.151  | vol: 83393 nodes 502015 elems, labels [1  2  3], zero-vol 0
+[seed2] PASS  surf: 710 nodes 1262 faces, min area 0.151  | vol: 83414 nodes 501839 elems, labels [1  2  3], zero-vol 0
+[seed12345] PASS  surf: 710 nodes 1262 faces, min area 0.151  | vol: 83516 nodes 502280 elems, labels [1  2  3], zero-vol 0
+[seed99999] PASS  surf: 710 nodes 1262 faces, min area 0.151  | vol: 83609 nodes 502591 elems, labels [1  2  3], zero-vol 0
+[nocork] PASS  surf: 508 nodes 786 faces, min area 19.3  | vol: 87017 nodes 519527 elems, labels [1  2  3], zero-vol 0
